@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import argparse
 import json
+import tensorflow as tf
 import keras
 import numpy as np
 import os
@@ -13,6 +14,9 @@ import time
 import network
 import load
 import util
+
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 MAX_EPOCHS = 100
 
@@ -25,7 +29,7 @@ def make_save_dir(dirname, experiment_name):
 
 def get_filename_for_saving(save_dir):
     return os.path.join(save_dir,
-            "{val_loss:.3f}-{val_acc:.3f}-{epoch:03d}-{loss:.3f}-{acc:.3f}.hdf5")
+            "{val_loss:.3f}-{val_accuracy:.3f}-{epoch:03d}-{loss:.3f}-{accuracy:.3f}.hdf5")
 
 def train(args, params):
 
