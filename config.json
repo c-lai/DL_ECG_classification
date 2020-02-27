@@ -1,0 +1,10 @@
+{
+    "train": "./Training_WFDB/train",
+    "dev": "./Training_WFDB/dev",
+    "save_dir": "save",
+    "learning_rate": 1,
+    "generator": 1,
+    "batch_size": 1,
+    "input_shape": [12, null],
+    "step": 256
+}
