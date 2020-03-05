@@ -29,7 +29,7 @@ def make_save_dir(dirname, experiment_name):
 
 def get_filename_for_saving(save_dir):
     return os.path.join(save_dir,
-            "{val_loss:.3f}-{val_accuracy:.3f}-{epoch:03d}-{loss:.3f}-{accuracy:.3f}.hdf5")
+            "{epoch:03d}-{val_loss:.3f}-{val_categorical_accuracy:.3f}-{loss:.3f}-{categorical_accuracy:.3f}.hdf5")
 
 def train(args, params):
 
@@ -45,7 +45,7 @@ def train(args, params):
 
     save_dir = make_save_dir(params['save_dir'], args.experiment)
 
-    # util.save(preproc, save_dir)
+    util.save(preproc, save_dir)
 
     # params.update({
     #     "input_shape": [None, 1],
@@ -55,10 +55,10 @@ def train(args, params):
     # model = network.build_network(**params)
     model = network.build_test_network(**params)
 
-    stopping = keras.callbacks.EarlyStopping(patience=8)
+    stopping = keras.callbacks.EarlyStopping(patience=10)
 
     reduce_lr = keras.callbacks.ReduceLROnPlateau(
-        factor=0.1,
+        factor=0.2,
         patience=2,
         min_lr=params["learning_rate"] * 0.001)
 

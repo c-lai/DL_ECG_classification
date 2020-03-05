@@ -2,9 +2,16 @@
     "train": "./Training_WFDB/train",
     "dev": "./Training_WFDB/dev",
     "save_dir": "save",
-    "learning_rate": 1,
+    "learning_rate": 0.1,
     "generator": 1,
-    "batch_size": 1,
+    "batch_size": 64,
     "input_shape": [12, null],
-    "step": 256
+    "step": 256,
+    "is_regular_conv": 1,
+    "conv_init": "glorot_normal",
+    "conv_activation": "relu",
+    "conv_filter_length": 16,
+    "conv_num_filters_start": 32,
+    "conv_subsample_lengths": [5,5,3,3],
+    "num_categories": 9
 }
