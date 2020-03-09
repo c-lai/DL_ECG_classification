@@ -45,7 +45,7 @@ def resnet_block(
         subsample_length,
         block_index,
         **params):
-    from keras.layers import Add 
+    from keras.layers import Add
     from keras.layers import MaxPooling1D
     from keras.layers.core import Lambda
 
@@ -107,11 +107,8 @@ def add_resnet_layers(layer, **params):
 def add_output_layer(layer, **params):
     from keras.layers.core import Dense, Activation
     from keras.layers.wrappers import TimeDistributed
-    # layer = TimeDistributed(Dense(params["num_categories"]))(layer)
-    # return Activation('softmax')(layer)
-    layer = Dense(params["num_categories"], activation='softmax')(layer)
-    return layer
-
+    layer = TimeDistributed(Dense(params["num_categories"]))(layer)
+    return Activation('softmax')(layer)
 
 def add_compile(model, **params):
     from keras.optimizers import Adam
@@ -121,11 +118,11 @@ def add_compile(model, **params):
 
     model.compile(loss='categorical_crossentropy',
                   optimizer=optimizer,
-                  metrics=['categorical_accuracy'])
+                  metrics=['accuracy'])
 
 def build_network(**params):
     from keras.models import Model
-    from keras.layers import Input, Lambda, Reshape, concatenate
+    from keras.layers import Input
     inputs = Input(shape=params['input_shape'],
                    dtype='float32',
                    name='inputs')
@@ -135,24 +132,10 @@ def build_network(**params):
     else:
         layer = add_resnet_layers(inputs, **params)
 
-    # layers = []
-    # for i in range(12):
-    #     split = Lambda(lambda x: x[:, i, :])(inputs)
-    #     reshape = Reshape((-1, params['step']))(split)
-    #     if params.get('is_regular_conv', False):
-    #         layer = add_conv_layers(reshape, **params)
-    #     else:
-    #         layer = add_resnet_layers(reshape, **params)
-    #     layers.append(layer)
-    #
-    # merge_layer = concatenate(layers)
     output = add_output_layer(layer, **params)
     model = Model(inputs=[inputs], outputs=[output])
     if params.get("compile", True):
         add_compile(model, **params)
-
-    print(model.summary())
-
     return model
 
 
@@ -192,6 +175,57 @@ def build_test_network(**params):
 
     model = Model(inputs=inputs, outputs=output)
     model.compile(loss='categorical_crossentropy', optimizer="adam",
+                  metrics=["categorical_accuracy"])
+
+    print(model.summary())
+
+    return model
+
+
+def build_network_1lead(**params):
+    from keras.models import Sequential, Model
+    from keras.layers import SimpleRNN, Dropout, Dense, Input, TimeDistributed, \
+        Lambda, concatenate, Reshape, LSTM, TimeDistributed, Conv1D, \
+        BatchNormalization, ReLU, Bidirectional, MaxPooling1D, Add
+    from keras.metrics import categorical_accuracy, top_k_categorical_accuracy
+    from keras.optimizers import Adam
+
+    inputs = Input(shape=[1, None])
+    reshape = Reshape((-1, 1))(inputs)
+    conv = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(reshape)
+    BN_layer = BatchNormalization()(conv)
+    block_out1 = ReLU()(BN_layer)
+
+    conv1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(block_out1)
+    BN_layer1 = BatchNormalization()(conv1)
+    relu1 = ReLU()(BN_layer1)
+    dropout1 = Dropout(0.5)(relu1)
+    conv2 = Conv1D(filters=64, kernel_size=5, strides=2, padding='same')(dropout1)
+    max_pool = MaxPooling1D(pool_size=2, padding='same')(block_out1)
+    block_out2 = Add()([conv2, max_pool])
+
+    res_block_end = block_out2
+
+    for i in range(3):
+        BN_layer_res_1 = BatchNormalization()(res_block_end)
+        relu_res_1 = ReLU()(BN_layer_res_1)
+        conv_res_1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(relu_res_1)
+        BN_layer_res_2 = BatchNormalization()(conv_res_1)
+        relu_res_2 = ReLU()(BN_layer_res_2)
+        dropout_res = Dropout(0.5)(relu_res_2)
+        conv_res_2 = Conv1D(filters=64, kernel_size=5, strides=2, padding='same')(dropout_res)
+        max_pool_res = MaxPooling1D(pool_size=2, padding='same')(res_block_end)
+        res_block_end = Add()([conv_res_2, max_pool_res])
+
+    BN_output = BatchNormalization()(res_block_end)
+    relu_output = ReLU()(BN_output)
+    LSTM_output = LSTM(32)(relu_output)
+
+    output = Dense(9, activation='softmax')(LSTM_output)
+
+    model = Model(inputs=inputs, outputs=output)
+    optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
+    model.compile(loss='categorical_crossentropy', optimizer=optimizer,
                   metrics=["categorical_accuracy"])
 
     print(model.summary())

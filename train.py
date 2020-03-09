@@ -34,9 +34,9 @@ def get_filename_for_saving(save_dir):
 def train(args, params):
 
     print("Loading training set...")
-    train = load.load_dataset(params['train'])
+    train = load.load_dataset(params['train'], params['lead'])
     print("Loading dev set...")
-    dev = load.load_dataset(params['dev'])
+    dev = load.load_dataset(params['dev'], params['lead'])
     print("Building preprocessor...")
     preproc = load.Preproc(*train)
     print("Training size: " + str(len(train[0])) + " examples.")
@@ -53,14 +53,14 @@ def train(args, params):
     # })
 
     # model = network.build_network(**params)
-    model = network.build_test_network(**params)
+    model = network.build_network_1lead(**params)
 
     stopping = keras.callbacks.EarlyStopping(patience=10)
 
     reduce_lr = keras.callbacks.ReduceLROnPlateau(
         factor=0.2,
         patience=2,
-        min_lr=params["learning_rate"] * 0.001)
+        min_lr=params["learning_rate"] * 0.01)
 
     checkpointer = keras.callbacks.ModelCheckpoint(
         filepath=get_filename_for_saving(save_dir),

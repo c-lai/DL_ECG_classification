@@ -40,13 +40,14 @@ class Preproc:
         return self.process_x(x), self.process_y(y)
 
     def process_x(self, x):
-        x = crop(x)
-        means_expanded = np.outer(self.mean, np.ones(x[0].shape[1]))
-        std_expaned = np.outer(self.std, np.ones(x[0].shape[1]))
-        #x = (x - self.mean) / self.std
-        x = (x - means_expanded) / std_expaned
-        # x = x[:, :, :, None]
-        return x
+        x_cropped = crop(x)
+        # means_expanded = np.outer(self.mean, np.ones(x[0].shape[1]))
+        # std_expaned = np.outer(self.std, np.ones(x[0].shape[1]))
+        # #x = (x - self.mean) / self.std
+        # x = (x - means_expanded) / std_expaned
+        # # x = x[:, :, :, None]
+        x_array = np.asarray(x_cropped, dtype=np.float32)
+        return x_array
 
     def process_y(self, y):
         # TODO, awni, fix hack pad with noise for cinc
@@ -62,7 +63,7 @@ class Preproc:
 
         return y_vector
 
-def crop(x, val=0, dtype=np.float32):
+def crop(x):
     min_len = min(i.shape[1] for i in x)
     cropped = ()
     for e, i in enumerate(x):
@@ -81,7 +82,7 @@ def compute_mean_std(x):
     return (np.mean(x, axis=1).astype(np.float32),
            np.std(x, axis=1).astype(np.float32))
 
-def load_dataset(directory):
+def load_dataset(directory, lead=0):
     labels = []
     ecgs = []
     for root, dirs, files in os.walk(directory, topdown=False):
@@ -91,7 +92,18 @@ def load_dataset(directory):
                 ecg_file = os.path.join(root, name)
                 label_file = os.path.join(root, patient+".hea")
 
-                ecg = load_ecg(ecg_file)
+                if lead:
+                    ecg = np.reshape(load_ecg(ecg_file)[lead-1, :], (1, -1))
+                    ecg_mean = np.mean(ecg).astype(np.float32)
+                    ecg_std = np.std(ecg).astype(np.float32)
+                    ecg = (ecg - ecg_mean) / ecg_std
+                else:
+                    ecg = load_ecg(ecg_file)
+                    ecg_mean = np.mean(ecg, axis=1).astype(np.float32)
+                    ecg_std = np.std(ecg, axis=1).astype(np.float32)
+                    means_expanded = np.outer(ecg_mean, np.ones(ecg.shape[1]))
+                    std_expanded = np.outer(ecg_std, np.ones(ecg.shape[1]))
+                    ecg = (ecg - means_expanded) / std_expanded
                 label = linecache.getline(label_file, 16)[5:-1]
 
                 ecgs.append(ecg)
@@ -117,7 +129,7 @@ if __name__ == "__main__":
     # data_json = "examples/cinc17/train.json"
     # train = load_dataset(data_json)
     data_directory = "Training_WFDB"
-    train = load_dataset(data_directory)
+    train = load_dataset(data_directory, 1)
     preproc = Preproc(*train)
     gen = data_generator(16, preproc, *train)
     for x, y in gen:
