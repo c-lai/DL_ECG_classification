@@ -16,21 +16,6 @@ import network
 import load
 import util
 
-# physical_devices = tf.config.experimental.list_physical_devices('GPU')
-# tf.config.experimental.set_memory_growth(physical_devices[0], True)
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-  # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
-  try:
-    tf.config.experimental.set_virtual_device_configuration(
-        gpus[0],
-        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=2048)])
-    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-  except RuntimeError as e:
-    # Virtual devices must be set before GPUs have been initialized
-    print(e)
-
 MAX_EPOCHS = 100
 
 def make_save_dir(dirname, experiment_name):
@@ -71,8 +56,9 @@ def train(args, params):
     stopping = keras.callbacks.EarlyStopping(patience=10)
 
     reduce_lr = keras.callbacks.ReduceLROnPlateau(
-        factor=0.2,
+        factor=0.1,
         patience=3,
+        verbose=1,
         min_lr=params["learning_rate"] * 0.001)
 
     checkpointer = keras.callbacks.ModelCheckpoint(
@@ -82,7 +68,7 @@ def train(args, params):
     batch_size = params.get("batch_size", 4)
 
     from network import Metrics
-    metrics = Metrics(preproc.process(dev[0], dev[1]), batch_size=batch_size)
+    metrics = Metrics()
 
     if params.get("generator", False):
         train_gen = load.data_generator(batch_size, preproc, *train)
@@ -93,7 +79,7 @@ def train(args, params):
             epochs=MAX_EPOCHS,
             validation_data=dev_gen,
             validation_steps=int(len(dev[0]) / batch_size),
-            callbacks=[checkpointer, reduce_lr, stopping, metrics])
+            callbacks=[checkpointer, reduce_lr, stopping])
     else:
         train_x, train_y = preproc.process(*train)
         dev_x, dev_y = preproc.process(*dev)

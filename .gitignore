@@ -165,3 +165,4 @@ val_labels.npy
 val_prob.npy
 *.hdf5
 *.bin
+*.csv

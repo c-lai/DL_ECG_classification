@@ -12,9 +12,11 @@ import util
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-def predict(data_json, model_path):
+lead = 2
+
+def predict(data_path, model_path):
     preproc = util.load(os.path.dirname(model_path))
-    dataset = load.load_dataset(data_json)
+    dataset = load.load_dataset(data_path, lead)
     x, y = preproc.process(*dataset)
 
     model = keras.models.load_model(model_path)

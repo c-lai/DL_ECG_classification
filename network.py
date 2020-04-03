@@ -149,7 +149,7 @@ def build_test_network(**params):
     inputs = Input(shape=[12, None])
 
     rnn_layers = []
-    for i in range(12):
+    for i in range(24):
         split = Lambda(lambda x: x[:, i, :])(inputs)
         reshape = Reshape((-1, params['step']))(split)
         # conv1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(reshape)
@@ -182,11 +182,78 @@ def build_test_network(**params):
     return model
 
 
+import numpy as np
+from keras.callbacks import Callback
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
+from evaluate_12ECG_score import compute_beta_score
+
+class Metrics(Callback):
+    def __init__(self, val_data, batch_size):
+        super().__init__()
+        self.validation_data = val_data
+        self.batch_size = batch_size
+
+        self.num_classes = 9
+        self.beta = 2
+
+    def on_train_begin(self, logs={}):
+        self.val_accuracy = []
+        self.val_f_measure = []
+        self.val_Fbeta_measure = []
+        self.val_Gbeta_measure = []
+
+    def on_epoch_end(self, epoch, logs={}):
+        # batches = sum(1 for x in self.validation_data)
+        # total = batches * self.batch_size
+        #
+        # val_pred_score = np.zeros((total, self.num_classes))
+        # val_pred_label = np.zeros((total, self.num_classes), dtype=int)
+        # val_targ = np.zeros((total, self.num_classes), dtype=int)
+        # for batch in range(batches):
+        #     xVal, yVal = next(self.validation_data)
+        #     val_pred_score[batch * self.batch_size: (batch + 1) * self.batch_size] = np.asarray(self.model.predict(xVal))
+        #     val_targ[batch * self.batch_size: (batch + 1) * self.batch_size] = yVal
+
+        # val_pred_score = []
+        # val_targ = []
+        # for xyVal in enumerate(self.validation_data):
+        #     val_pred_score_batch = np.asarray(self.model.predict(xyVal[1][0]))
+        #     val_pred_score.append(val_pred_score_batch)
+        #     val_targ.append(xyVal[1][1])
+        #
+        # val_pred_score = np.array(val_pred_score).reshape(-1, self.num_classes)
+        # val_targ = np.array(val_targ).reshape(-1, self.num_classes)
+
+        val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
+        val_targ = self.validation_data[1]
+
+        val_pred_label = np.zeros((val_pred_score.shape[0], self.num_classes), dtype=int)
+        labels = np.argmax(val_pred_score, axis=1)
+        for i, label in enumerate(labels):
+            val_pred_label[i, label] = 1
+
+        # _val_f1 = f1_score(val_targ, val_predict)
+        # _val_recall = recall_score(val_targ, val_predict)
+        # _val_precision = precision_score(val_targ, val_predict)
+        # self.val_f1s.append(_val_f1)
+        # self.val_recalls.append(_val_recall)
+        # self.val_precisions.append(_val_precision)
+        accuracy, f_measure, Fbeta_measure, Gbeta_measure = compute_beta_score(val_targ, val_pred_label, self.beta,
+                                                                               self.num_classes)
+        self.val_accuracy.append(accuracy)
+        self.val_f_measure.append(f_measure)
+        self.val_Fbeta_measure.append(Fbeta_measure)
+        self.val_Gbeta_measure.append(Gbeta_measure)
+        print(" - val_accuracy:% f - val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f"
+              % (accuracy, f_measure, Fbeta_measure, Gbeta_measure))
+        return
+
+
 def build_network_1lead(**params):
     from keras.models import Sequential, Model
     from keras.layers import SimpleRNN, Dropout, Dense, Input, TimeDistributed, \
         Lambda, concatenate, Reshape, LSTM, TimeDistributed, Conv1D, \
-        BatchNormalization, ReLU, Bidirectional, MaxPooling1D, Add
+        BatchNormalization, ReLU, Bidirectional, MaxPooling1D, Add, LeakyReLU, ELU
     from keras.metrics import categorical_accuracy, top_k_categorical_accuracy
     from keras.optimizers import Adam
 
@@ -206,7 +273,7 @@ def build_network_1lead(**params):
 
     res_block_end = block_out2
 
-    for i in range(3):
+    for i in range(24):
         BN_layer_res_1 = BatchNormalization()(res_block_end)
         relu_res_1 = ReLU()(BN_layer_res_1)
         conv_res_1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(relu_res_1)
@@ -225,8 +292,10 @@ def build_network_1lead(**params):
 
     model = Model(inputs=inputs, outputs=output)
     optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
+
     model.compile(loss='categorical_crossentropy', optimizer=optimizer,
                   metrics=["categorical_accuracy"])
+
 
     print(model.summary())
 

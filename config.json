@@ -2,7 +2,7 @@
     "train": "./Training_WFDB/train",
     "dev": "./Training_WFDB/dev",
     "save_dir": "save",
-    "learning_rate": 0.1,
+    "learning_rate": 0.01,
     "generator": 1,
     "batch_size": 64,
     "input_shape": [12, null],

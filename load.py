@@ -34,7 +34,7 @@ class Preproc:
         self.classes = sorted(set(l for label in labels for l in label))
         self.int_to_class = dict( zip(range(len(self.classes)), self.classes))
         self.class_to_int = {c : i for i, c in self.int_to_class.items()}
-        self.labels = ["Normal", "AF", "I-AVB", "LBBB", "RBBB", "PAC", "PVC", "STD", "STE"]
+        self.labels = ["AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"]
 
     def process(self, x, y):
         return self.process_x(x), self.process_y(y)
@@ -106,6 +106,9 @@ def load_dataset(directory, lead=0):
                     ecg = (ecg - means_expanded) / std_expanded
                 label = linecache.getline(label_file, 16)[5:-1]
 
+                with open(os.path.join(root, patient+".txt"), 'w') as f:
+                        f.write("%s" % label)
+
                 ecgs.append(ecg)
                 labels.append(label)
 
@@ -128,7 +131,7 @@ def load_ecg(record):
 if __name__ == "__main__":
     # data_json = "examples/cinc17/train.json"
     # train = load_dataset(data_json)
-    data_directory = "Training_WFDB"
+    data_directory = "Training_WFDB/train"
     train = load_dataset(data_directory, 1)
     preproc = Preproc(*train)
     gen = data_generator(16, preproc, *train)
