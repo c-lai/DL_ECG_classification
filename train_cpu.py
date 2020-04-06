@@ -27,7 +27,7 @@ def make_save_dir(dirname, experiment_name):
 
 def get_filename_for_saving(save_dir):
     return os.path.join(save_dir,
-            "{epoch:03d}-{val_loss:.3f}-{val_categorical_accuracy:.3f}-{loss:.3f}-{categorical_accuracy:.3f}.hdf5")
+            "epoch{epoch:03d}-val_loss{val_loss:.3f}-train_loss{loss:.3f}.hdf5")
 
 def train(args, params):
 
@@ -57,8 +57,9 @@ def train(args, params):
 
     reduce_lr = keras.callbacks.ReduceLROnPlateau(
         factor=0.1,
-        patience=3,
+        patience=4,
         verbose=1,
+        mode='min',
         min_lr=params["learning_rate"] * 0.001)
 
     checkpointer = keras.callbacks.ModelCheckpoint(
@@ -68,7 +69,7 @@ def train(args, params):
     batch_size = params.get("batch_size", 4)
 
     from network import Metrics
-    metrics = Metrics()
+    metrics = Metrics(preproc.process(dev[0], dev[1]), batch_size=batch_size)
 
     if params.get("generator", False):
         train_gen = load.data_generator(batch_size, preproc, *train)
@@ -79,7 +80,7 @@ def train(args, params):
             epochs=MAX_EPOCHS,
             validation_data=dev_gen,
             validation_steps=int(len(dev[0]) / batch_size),
-            callbacks=[checkpointer, reduce_lr, stopping])
+            callbacks=[checkpointer, reduce_lr, stopping, metrics])
     else:
         train_x, train_y = preproc.process(*train)
         dev_x, dev_y = preproc.process(*dev)

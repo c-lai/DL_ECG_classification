@@ -6,12 +6,13 @@ import pickle
 import keras
 import tensorflow as tf
 import util
+from network import weighted_mse, weighted_cross_entropy
 
 # physical_devices = tf.config.experimental.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-model_path = ".\\save\\lead2_ResNet24\\1585699734-503\\016-1.272-0.738-0.861-0.798.hdf5"
-lead = 2
+model_path = ".\\save\\lead6_ResNet16_WMSE\\1586184908-757\\epoch030-val_loss0.139-train_loss0.273.hdf5"
+lead = 6
 
 def run_12ECG_classifier(data, header_data, classes,model):
 
@@ -42,6 +43,8 @@ def load_preproc(dirname):
 
 def load_12ECG_model():
     # load the model from disk
-    loaded_model = keras.models.load_model(model_path)
+    loaded_model = keras.models.load_model(model_path,
+                                           custom_objects={'weighted_mse': weighted_mse,
+                                                           'weighted_cross_entropy': weighted_cross_entropy})
 
     return loaded_model

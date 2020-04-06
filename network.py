@@ -1,4 +1,6 @@
 from keras import backend as K
+from tensorflow import math as tfmath
+import os
 
 def _bn_relu(layer, dropout=0, **params):
     from keras.layers import BatchNormalization
@@ -139,59 +141,17 @@ def build_network(**params):
     return model
 
 
-def build_test_network(**params):
-    from keras.models import Sequential, Model
-    from keras.layers import SimpleRNN, Dropout, Dense, Input, TimeDistributed, \
-        Lambda, concatenate, Reshape, LSTM, TimeDistributed, Conv1D, \
-        BatchNormalization, ReLU, Bidirectional
-    from keras.metrics import categorical_accuracy, top_k_categorical_accuracy
-
-    inputs = Input(shape=[12, None])
-
-    rnn_layers = []
-    for i in range(24):
-        split = Lambda(lambda x: x[:, i, :])(inputs)
-        reshape = Reshape((-1, params['step']))(split)
-        # conv1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(reshape)
-        # BN_layer1 = BatchNormalization()(conv1)
-        # relu1 = ReLU()(BN_layer1)
-        # dropout1 = Dropout(0.1)(relu1)
-        # conv2 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(dropout1)
-        # BN_layer2 = BatchNormalization()(conv2)
-        # relu2 = ReLU()(BN_layer2)
-        # dropout2 = Dropout(0.1)(relu2)
-
-        LSTMlayer1 = Bidirectional(LSTM(64, return_sequences=True))(reshape)
-        BN_layer1 = BatchNormalization()(LSTMlayer1)
-        LSTMlayer2 = Bidirectional(LSTM(64, return_sequences=True))(BN_layer1)
-        BN_layer2 = BatchNormalization()(LSTMlayer2)
-        LSTMlayer3 = LSTM(32)(BN_layer2)
-        rnn_layers.append(LSTMlayer3)
-
-    merge_layer = concatenate(rnn_layers)
-
-    dropout_layer = Dropout(0.1)(merge_layer)
-    output = Dense(9, activation='softmax')(dropout_layer)
-
-    model = Model(inputs=inputs, outputs=output)
-    model.compile(loss='categorical_crossentropy', optimizer="adam",
-                  metrics=["categorical_accuracy"])
-
-    print(model.summary())
-
-    return model
-
-
 import numpy as np
 from keras.callbacks import Callback
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 from evaluate_12ECG_score import compute_beta_score
 
 class Metrics(Callback):
-    def __init__(self, val_data, batch_size):
+    def __init__(self, val_data, batch_size, save_dir):
         super().__init__()
         self.validation_data = val_data
         self.batch_size = batch_size
+        self.save_dir = save_dir
 
         self.num_classes = 9
         self.beta = 2
@@ -201,29 +161,9 @@ class Metrics(Callback):
         self.val_f_measure = []
         self.val_Fbeta_measure = []
         self.val_Gbeta_measure = []
+        self.FG_mean = []
 
     def on_epoch_end(self, epoch, logs={}):
-        # batches = sum(1 for x in self.validation_data)
-        # total = batches * self.batch_size
-        #
-        # val_pred_score = np.zeros((total, self.num_classes))
-        # val_pred_label = np.zeros((total, self.num_classes), dtype=int)
-        # val_targ = np.zeros((total, self.num_classes), dtype=int)
-        # for batch in range(batches):
-        #     xVal, yVal = next(self.validation_data)
-        #     val_pred_score[batch * self.batch_size: (batch + 1) * self.batch_size] = np.asarray(self.model.predict(xVal))
-        #     val_targ[batch * self.batch_size: (batch + 1) * self.batch_size] = yVal
-
-        # val_pred_score = []
-        # val_targ = []
-        # for xyVal in enumerate(self.validation_data):
-        #     val_pred_score_batch = np.asarray(self.model.predict(xyVal[1][0]))
-        #     val_pred_score.append(val_pred_score_batch)
-        #     val_targ.append(xyVal[1][1])
-        #
-        # val_pred_score = np.array(val_pred_score).reshape(-1, self.num_classes)
-        # val_targ = np.array(val_targ).reshape(-1, self.num_classes)
-
         val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
         val_targ = self.validation_data[1]
 
@@ -232,21 +172,40 @@ class Metrics(Callback):
         for i, label in enumerate(labels):
             val_pred_label[i, label] = 1
 
-        # _val_f1 = f1_score(val_targ, val_predict)
-        # _val_recall = recall_score(val_targ, val_predict)
-        # _val_precision = precision_score(val_targ, val_predict)
-        # self.val_f1s.append(_val_f1)
-        # self.val_recalls.append(_val_recall)
-        # self.val_precisions.append(_val_precision)
         accuracy, f_measure, Fbeta_measure, Gbeta_measure = compute_beta_score(val_targ, val_pred_label, self.beta,
                                                                                self.num_classes)
+        FG_mean = np.mean([Fbeta_measure, Gbeta_measure])
         self.val_accuracy.append(accuracy)
         self.val_f_measure.append(f_measure)
         self.val_Fbeta_measure.append(Fbeta_measure)
         self.val_Gbeta_measure.append(Gbeta_measure)
-        print(" - val_accuracy:% f - val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f"
-              % (accuracy, f_measure, Fbeta_measure, Gbeta_measure))
+        self.FG_mean.append(FG_mean)
+        print(" - val_accuracy:% f - val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
+              % (accuracy, f_measure, Fbeta_measure, Gbeta_measure, FG_mean))
+
+        with open(os.path.join(self.save_dir, f"log-epoch{epoch+1:03d}-FG_mean{FG_mean:.3f}.txt"), 'a', encoding='utf-8') as f:
+            f.write("val_accuracy:% f \nval_f_measure:% f \nval_Fbeta_measure:% f \nval_Gbeta_measure:% f \nGeometric Mean:% f"
+              % (accuracy, f_measure, Fbeta_measure, Gbeta_measure, FG_mean))
+
         return
+
+
+def weighted_mse(yTrue,yPred):
+    class_weight = K.constant([[0.043], [0.073], [0.264],
+                               [0.057], [0.097], [0.084],
+                               [0.031], [0.067], [0.284]])
+    class_se = K.square(yPred-yTrue)
+    w_mse = K.dot(class_se, class_weight)
+    return K.sum(w_mse)
+
+
+def weighted_cross_entropy(yTrue,yPred):
+    class_weight = K.constant([[0.043], [0.073], [0.264],
+                               [0.057], [0.097], [0.084],
+                               [0.031], [0.067], [0.284]])
+    class_CE = -(tfmath.multiply(yTrue, K.log(yPred))+2*tfmath.multiply(1-yTrue, K.log(1-yPred)))
+    w_cross_entropy = K.dot(class_CE, class_weight)
+    return K.sum(w_cross_entropy)
 
 
 def build_network_1lead(**params):
@@ -259,43 +218,43 @@ def build_network_1lead(**params):
 
     inputs = Input(shape=[1, None])
     reshape = Reshape((-1, 1))(inputs)
-    conv = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(reshape)
+    conv = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(reshape)
     BN_layer = BatchNormalization()(conv)
     block_out1 = ReLU()(BN_layer)
 
-    conv1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(block_out1)
+    conv1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(block_out1)
     BN_layer1 = BatchNormalization()(conv1)
     relu1 = ReLU()(BN_layer1)
     dropout1 = Dropout(0.5)(relu1)
-    conv2 = Conv1D(filters=64, kernel_size=5, strides=2, padding='same')(dropout1)
+    conv2 = Conv1D(filters=32, kernel_size=5, strides=2, padding='same')(dropout1)
     max_pool = MaxPooling1D(pool_size=2, padding='same')(block_out1)
     block_out2 = Add()([conv2, max_pool])
 
     res_block_end = block_out2
 
-    for i in range(24):
+    for i in range(16):
         BN_layer_res_1 = BatchNormalization()(res_block_end)
         relu_res_1 = ReLU()(BN_layer_res_1)
-        conv_res_1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(relu_res_1)
+        conv_res_1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(relu_res_1)
         BN_layer_res_2 = BatchNormalization()(conv_res_1)
         relu_res_2 = ReLU()(BN_layer_res_2)
         dropout_res = Dropout(0.5)(relu_res_2)
-        conv_res_2 = Conv1D(filters=64, kernel_size=5, strides=2, padding='same')(dropout_res)
+        conv_res_2 = Conv1D(filters=32, kernel_size=5, strides=2, padding='same')(dropout_res)
         max_pool_res = MaxPooling1D(pool_size=2, padding='same')(res_block_end)
         res_block_end = Add()([conv_res_2, max_pool_res])
 
     BN_output = BatchNormalization()(res_block_end)
     relu_output = ReLU()(BN_output)
-    LSTM_output = LSTM(32)(relu_output)
+    # LSTM_output1 = LSTM(32, return_sequences=True)(relu_output)
+    # BN_layer1 = BatchNormalization()(LSTM_output1)
+    LSTM_output2 = LSTM(32)(relu_output)
 
-    output = Dense(9, activation='softmax')(LSTM_output)
+    output = Dense(9, activation='softmax')(LSTM_output2)
 
     model = Model(inputs=inputs, outputs=output)
     optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
 
-    model.compile(loss='categorical_crossentropy', optimizer=optimizer,
-                  metrics=["categorical_accuracy"])
-
+    model.compile(loss=weighted_cross_entropy, optimizer=optimizer)
 
     print(model.summary())
 

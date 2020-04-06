@@ -166,3 +166,4 @@ val_prob.npy
 *.hdf5
 *.bin
 *.csv
+*.txt
