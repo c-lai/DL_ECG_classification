@@ -143,7 +143,7 @@ def build_network(**params):
 
 import numpy as np
 from keras.callbacks import Callback
-from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
+# from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 from evaluate_12ECG_score import compute_beta_score
 
 class Metrics(Callback):

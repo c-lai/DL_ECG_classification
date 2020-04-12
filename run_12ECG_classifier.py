@@ -15,10 +15,10 @@ from scipy.io import loadmat
 # tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 leads = [1, 2, 4]
-lead1_model_path = ".\\save\\lead1_final\\epoch014-val_loss0.442-train_loss0.197.hdf5"
-lead2_model_path = ".\\save\\lead2_final\\epoch020-val_loss0.044-train_loss0.109.hdf5"
-lead4_model_path = ".\\save\\lead4_final\\epoch027-val_loss0.380-train_loss0.208.hdf5"
-final_model_path = ".\\save\\decision_model_final\\epoch013-val_loss0.430-train_loss0.466.hdf5"
+lead1_model_path = "./save/lead1_final/epoch014-val_loss0.442-train_loss0.197.hdf5"
+lead2_model_path = "./save/lead2_final/epoch020-val_loss0.044-train_loss0.109.hdf5"
+lead4_model_path = "./save/lead4_final/epoch027-val_loss0.380-train_loss0.208.hdf5"
+final_model_path = "./save/decision_model_final/epoch013-val_loss0.430-train_loss0.466.hdf5"
 
 def ecg_standardize(ecg):
     ecg_mean = np.mean(ecg).astype(np.float32)
