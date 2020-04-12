@@ -1,4 +1,4 @@
-FROM python:3.7.3-slim
+FROM tensorflow/tensorflow:2.1.0-py3
 
 ## The MAINTAINER instruction sets the Author field of the generated images
 MAINTAINER clai29@jhmi.edu
