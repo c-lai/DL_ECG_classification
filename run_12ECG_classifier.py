@@ -20,18 +20,20 @@ lead2_model_path = ".\\save\\lead2_final\\epoch020-val_loss0.044-train_loss0.109
 lead4_model_path = ".\\save\\lead4_final\\epoch027-val_loss0.380-train_loss0.208.hdf5"
 final_model_path = ".\\save\\decision_model_final\\epoch013-val_loss0.430-train_loss0.466.hdf5"
 
+def ecg_standardize(ecg):
+    ecg_mean = np.mean(ecg).astype(np.float32)
+    ecg_std = np.std(ecg).astype(np.float32)
+    s_ecg = (ecg - ecg_mean) / ecg_std
+    return s_ecg
 
 def run_12ECG_classifier(data, header_data, classes, model):
-    preproc_1 = util.load(os.path.dirname(lead1_model_path))
-    preproc_2 = util.load(os.path.dirname(lead2_model_path))
-    preproc_4 = util.load(os.path.dirname(lead4_model_path))
-    preproc = [preproc_1, preproc_2, preproc_4]
+    preproc = util.load(os.path.dirname(lead1_model_path))
     dataset = (np.expand_dims(data, axis=0), header_data[15][5:-1])
 
     features_NN = []
     for i, lead in enumerate(leads):
-        dataset_leadi = ([dataset[0][:, lead-1, :]], [dataset[1]])
-        data_x, data_y = preproc[i].process(*dataset_leadi)
+        dataset_leadi = (ecg_standardize([dataset[0][:, lead-1, :]]), [dataset[1]])
+        data_x, data_y = preproc.process(*dataset_leadi)
         feature_model = keras.Model(inputs=model[i].input, outputs=model[i].layers[-4].output)
         feature_NN_i = feature_model.predict(data_x, verbose=0)
         features_NN.append(feature_NN_i)

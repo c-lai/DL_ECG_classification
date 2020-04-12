@@ -131,7 +131,7 @@ def load_ecg(record):
 if __name__ == "__main__":
     # data_json = "examples/cinc17/train.json"
     # train = load_dataset(data_json)
-    data_directory = "Training_WFDB/train"
+    data_directory = "Training_WFDB/all"
     train = load_dataset(data_directory, 1)
     preproc = Preproc(*train)
     gen = data_generator(16, preproc, *train)
