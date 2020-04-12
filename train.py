@@ -16,20 +16,21 @@ import network
 import load
 import util
 
+
 # physical_devices = tf.config.experimental.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(physical_devices[0], True)
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-  # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
-  try:
-    tf.config.experimental.set_virtual_device_configuration(
-        gpus[0],
-        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)])
-    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-  except RuntimeError as e:
-    # Virtual devices must be set before GPUs have been initialized
-    print(e)
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# if gpus:
+#   # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
+#   try:
+#     tf.config.experimental.set_virtual_device_configuration(
+#         gpus[0],
+#         [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)])
+#     logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+#     print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+#   except RuntimeError as e:
+#     # Virtual devices must be set before GPUs have been initialized
+#     print(e)
 
 MAX_EPOCHS = 100
 
@@ -66,16 +67,22 @@ def train(args, params):
     # })
 
     # model = network.build_network(**params)
-    model = network.build_network_1lead(**params)
+    # model = network.build_network_1lead(**params)
+    # model_path = ".\\save\\lead1_ResNet8_64_WMSE\\1586361669-991\\epoch017-val_loss0.392-train_loss0.179.hdf5"
+    # model_path = ".\\save\\lead2_ResNet8_64_WMSE\\1586365719-237\\epoch015-val_loss0.251-train_loss0.202.hdf5"
+    model_path = ".\\save\\lead4_ResNet8_64_WMSE\\1586384117-946\\epoch021-val_loss0.466-train_loss0.194.hdf5"
+    model = keras.models.load_model(model_path,
+                                    custom_objects={'weighted_mse': network.weighted_mse,
+                                                    'weighted_cross_entropy': network.weighted_cross_entropy})
 
-    stopping = keras.callbacks.EarlyStopping(patience=10)
+    stopping = keras.callbacks.EarlyStopping(patience=15)
 
     reduce_lr = keras.callbacks.ReduceLROnPlateau(
         factor=0.1,
-        patience=4,
+        patience=3,
         verbose=1,
         mode='min',
-        min_lr=params["learning_rate"] * 0.001)
+        min_lr=params["learning_rate"] * 0.01)
 
     checkpointer = keras.callbacks.ModelCheckpoint(
         filepath=get_filename_for_saving(save_dir),
@@ -83,8 +90,7 @@ def train(args, params):
 
     batch_size = params.get("batch_size", 4)
 
-    from network import Metrics
-    metrics = Metrics(preproc.process(dev[0], dev[1]), batch_size=batch_size, save_dir = save_dir)
+    metrics = network.Metrics(preproc.process(dev[0], dev[1]), batch_size=batch_size, save_dir = save_dir)
 
     if params.get("generator", False):
         train_gen = load.data_generator(batch_size, preproc, *train)

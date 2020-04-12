@@ -8,19 +8,25 @@ import os
 
 import load
 import util
+from keras import Model
+from network import weighted_mse, weighted_cross_entropy
 
-physical_devices = tf.config.experimental.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(physical_devices[0], True)
+# physical_devices = tf.config.experimental.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-lead = 2
+lead = 1
 
 def predict(data_path, model_path):
     preproc = util.load(os.path.dirname(model_path))
     dataset = load.load_dataset(data_path, lead)
     x, y = preproc.process(*dataset)
 
-    model = keras.models.load_model(model_path)
-    probs = model.predict(x, verbose=1)
+    model = keras.models.load_model(model_path,
+                                    custom_objects=
+                                       {'weighted_mse': weighted_mse, 'weighted_cross_entropy': weighted_cross_entropy})
+    # probs = model.predict(x, verbose=1)
+    feature_model = Model(inputs=model.input, outputs=model.layers[-2].output)
+    features = feature_model.predict(x, verbose=1)
 
     return probs, y
 

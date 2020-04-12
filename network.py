@@ -218,43 +218,46 @@ def build_network_1lead(**params):
 
     inputs = Input(shape=[1, None])
     reshape = Reshape((-1, 1))(inputs)
-    conv = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(reshape)
+    conv = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(reshape)
     BN_layer = BatchNormalization()(conv)
     block_out1 = ReLU()(BN_layer)
 
-    conv1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(block_out1)
+    conv1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(block_out1)
     BN_layer1 = BatchNormalization()(conv1)
     relu1 = ReLU()(BN_layer1)
     dropout1 = Dropout(0.5)(relu1)
-    conv2 = Conv1D(filters=32, kernel_size=5, strides=2, padding='same')(dropout1)
+    conv2 = Conv1D(filters=64, kernel_size=5, strides=2, padding='same')(dropout1)
     max_pool = MaxPooling1D(pool_size=2, padding='same')(block_out1)
     block_out2 = Add()([conv2, max_pool])
 
     res_block_end = block_out2
 
-    for i in range(16):
+    for i in range(8):
         BN_layer_res_1 = BatchNormalization()(res_block_end)
         relu_res_1 = ReLU()(BN_layer_res_1)
-        conv_res_1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(relu_res_1)
+        conv_res_1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(relu_res_1)
         BN_layer_res_2 = BatchNormalization()(conv_res_1)
         relu_res_2 = ReLU()(BN_layer_res_2)
         dropout_res = Dropout(0.5)(relu_res_2)
-        conv_res_2 = Conv1D(filters=32, kernel_size=5, strides=2, padding='same')(dropout_res)
+        conv_res_2 = Conv1D(filters=64, kernel_size=5, strides=2, padding='same')(dropout_res)
         max_pool_res = MaxPooling1D(pool_size=2, padding='same')(res_block_end)
         res_block_end = Add()([conv_res_2, max_pool_res])
 
     BN_output = BatchNormalization()(res_block_end)
     relu_output = ReLU()(BN_output)
-    # LSTM_output1 = LSTM(32, return_sequences=True)(relu_output)
-    # BN_layer1 = BatchNormalization()(LSTM_output1)
-    LSTM_output2 = LSTM(32)(relu_output)
+    # LSTM_output_1 = LSTM(32, return_sequences=True)(relu_output)
+    # BN_output_1 = BatchNormalization()(LSTM_output_1)
+    # relu_output_1 = ReLU()(BN_output_1)
+    LSTM_output_2 = LSTM(64)(relu_output)
+    BN_output_2 = BatchNormalization()(LSTM_output_2)
+    relu_output_2 = ReLU()(BN_output_2)
 
-    output = Dense(9, activation='softmax')(LSTM_output2)
+    output = Dense(9, activation='softmax')(relu_output_2)
 
     model = Model(inputs=inputs, outputs=output)
     optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
 
-    model.compile(loss=weighted_cross_entropy, optimizer=optimizer)
+    model.compile(loss=weighted_mse, optimizer=optimizer, metrics=['accuracy'])
 
     print(model.summary())
 

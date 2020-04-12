@@ -1,6 +1,6 @@
 {
-    "train": "./Training_WFDB/train",
-    "dev": "./Training_WFDB/dev",
+    "train": "./Training_WFDB/all",
+    "dev": "./Training_WFDB/all",
     "save_dir": "save",
     "learning_rate": 0.001,
     "generator": 1,
@@ -14,5 +14,5 @@
     "conv_num_filters_start": 32,
     "conv_subsample_lengths": [5,5,3,3],
     "num_categories": 9,
-    "lead": 2
+    "lead": 4
 }
