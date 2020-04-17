@@ -10,25 +10,25 @@ import keras
 from network import weighted_mse, weighted_cross_entropy
 from sklearn.svm import NuSVC
 
-f_1 = loadmat('features_train.mat')
-# f_train_1 = np.concatenate((f['features_1_train'], f['features_2_train'], f['features_4_train']), axis=1)
+f_1 = loadmat('features_train_final.mat')
+# f_all_1 = np.concatenate((f['features_1_all'], f['features_2_all'], f['features_4_all']), axis=1)
 f_2 = loadmat('features_bm_train_standard.mat')
-# f_train_2 = np.concatenate((f['features_1_train'], f['features_2_train'], f['features_4_train']), axis=1)
+# f_all_2 = np.concatenate((f['features_1_all'], f['features_2_all'], f['features_4_all']), axis=1)
 f_train = np.concatenate((f_1['features_1_train'], f_1['features_2_train'], f_1['features_4_train'],
                           f_2['features_bm_1_train_standard'], f_2['features_bm_2_train_standard'][:, 2:],
                           f_2['features_bm_4_train_standard'][:, 2:]), axis=1)
 # f_train = f['features_train']
-y_train = loadmat('y_train.mat')['y_train']
+y_train = loadmat('y_train_final.mat')['y_train']
 
-f_1 = loadmat('features_dev.mat')
+f_1 = loadmat('features_dev_final.mat')
 # f_dev_1 = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_4_dev']), axis=1)
 f_2 = loadmat('features_bm_dev_standard.mat')
 # f_dev_2 = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_4_dev']), axis=1)
-f_dev = np.concatenate((f_1['features_1_dev'][:1375,:], f_1['features_2_dev'][:1375,:], f_1['features_4_dev'][:1375,:],
+f_dev = np.concatenate((f_1['features_1_dev'], f_1['features_2_dev'], f_1['features_4_dev'],
                         f_2['features_bm_1_dev_standard'], f_2['features_bm_2_dev_standard'][:, 2:],
                         f_2['features_bm_4_dev_standard'][:, 2:]), axis=1)
 # f_dev = f['features_dev']
-y_dev = loadmat('y_dev.mat')['y_dev']
+y_dev = loadmat('y_dev_final.mat')['y_dev']
 
 beta = 2
 
@@ -41,11 +41,11 @@ beta = 2
 
 pred_label_list = []
 for i in range(9):
-    clf = RandomForestClassifier(n_estimators=150, max_depth=3,
-                                    bootstrap=True, random_state=0).fit(f_train, y_train[:, i])
-    # clf = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1,
-    #                                  max_depth=3, random_state=0).fit(f_train, y_train[:, i])
-    print(clf.score(f_dev, y_dev[:, i]))
+    print("processing class %d/9..." % (i + 1))
+    # clf = RandomForestClassifier(n_estimators=150, max_depth=3,
+    #                              bootstrap=True, random_state=0).fit(f_train, y_train[:, i])
+    clf = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1,
+                                     max_depth=3, random_state=0).fit(f_train, y_train[:, i])
 
     pred_prob_i_train = clf.predict_proba(f_train)[:, 1]
     # pred_prob_i_train = pred_prob_train[:, i]

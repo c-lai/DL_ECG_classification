@@ -1,0 +1,4 @@
+beat_threshold: 0.672000 
+val_Fbeta_measure: 0.974808 
+val_Gbeta_measure: 0.908163 
+Geometric Mean: 0.941486
