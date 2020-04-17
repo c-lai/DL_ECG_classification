@@ -190,6 +190,61 @@ class Metrics(Callback):
         return
 
 
+from sklearn.metrics import confusion_matrix
+
+class Metrics_single_class(Callback):
+    def __init__(self, val_data, batch_size, save_dir):
+        super().__init__()
+        self.validation_data = val_data
+        self.batch_size = batch_size
+        self.save_dir = save_dir
+
+        self.num_classes = 9
+        self.beta = 2
+
+    def on_train_begin(self, logs={}):
+        self.val_accuracy = []
+        self.val_f_measure = []
+        self.val_Fbeta_measure = []
+        self.val_Gbeta_measure = []
+        self.FG_mean = []
+
+    def on_epoch_end(self, epoch, logs={}):
+        val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
+        val_targ = self.validation_data[1]
+
+        # threshold = np.arange(0, 1, 0.001)
+        # tn = np.zeros(threshold.shape)
+        # fp = np.zeros(threshold.shape)
+        # fn = np.zeros(threshold.shape)
+        # tp = np.zeros(threshold.shape)
+        # for n, t in enumerate(threshold):
+        #     tn[n], fp[n], fn[n], tp[n] = confusion_matrix(val_targ, np.ceil(val_pred_score - t)).ravel()
+        # Fbeta_measure = (1 + self.beta ** 2) * tp / ((1 + self.beta ** 2) * tp + fp + self.beta ** 2 * fn)
+        # Gbeta_measure = tp / (tp + fp + self.beta * fn)
+        # FG_mean = (Fbeta_measure + Gbeta_measure) / 2
+        # best_threshold = threshold[np.argmax(FG_mean)]
+        best_threshold = 0.5
+
+        val_pred_label = np.ceil(val_pred_score - best_threshold)
+        TP = np.sum(val_pred_label * val_targ)
+        FP = np.sum(val_pred_label * (1 - val_targ))
+        FN = np.sum((1 - val_pred_label) * val_targ)
+        Fbeta_measure = (1 + self.beta ** 2) * TP / ((1 + self.beta ** 2) * TP + FP + self.beta ** 2 * FN)
+        Gbeta_measure = TP / (TP + FP + self.beta * FN)
+        FG_mean = (Fbeta_measure + Gbeta_measure) / 2
+        print("- beat_threshold: %f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
+              % (best_threshold, Fbeta_measure, Gbeta_measure, FG_mean))
+
+        with open(os.path.join(self.save_dir,
+                               f"log-epoch{epoch + 1:03d}-beat_threshold{best_threshold:.3f}-FG_mean{FG_mean:.3f}.txt"),
+                  'a', encoding='utf-8') as f:
+            f.write("beat_threshold: %f \nval_Fbeta_measure:% f \nval_Gbeta_measure:% f \nGeometric Mean:% f"
+                    % (best_threshold, Fbeta_measure, Gbeta_measure, FG_mean))
+
+        return
+
+
 def weighted_mse(yTrue,yPred):
     class_weight = K.constant([[0.043], [0.073], [0.264],
                                [0.057], [0.097], [0.084],
@@ -210,37 +265,37 @@ def weighted_cross_entropy(yTrue,yPred):
 
 def build_network_1lead(**params):
     from keras.models import Sequential, Model
-    from keras.layers import SimpleRNN, Dropout, Dense, Input, TimeDistributed, \
+    from keras.layers import Dropout, Dense, Input, TimeDistributed, \
         Lambda, concatenate, Reshape, LSTM, TimeDistributed, Conv1D, \
         BatchNormalization, ReLU, Bidirectional, MaxPooling1D, Add, LeakyReLU, ELU
     from keras.metrics import categorical_accuracy, top_k_categorical_accuracy
     from keras.optimizers import Adam
 
     inputs = Input(shape=[1, None])
-    reshape = Reshape((-1, 1))(inputs)
-    conv = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(reshape)
+    reshape = Reshape((-1, 512, 1))(inputs)
+    conv = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=1, padding='same'))(reshape)
     BN_layer = BatchNormalization()(conv)
     block_out1 = ReLU()(BN_layer)
 
-    conv1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(block_out1)
+    conv1 = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=1, padding='same'))(block_out1)
     BN_layer1 = BatchNormalization()(conv1)
     relu1 = ReLU()(BN_layer1)
     dropout1 = Dropout(0.5)(relu1)
-    conv2 = Conv1D(filters=64, kernel_size=5, strides=2, padding='same')(dropout1)
-    max_pool = MaxPooling1D(pool_size=2, padding='same')(block_out1)
+    conv2 = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=2, padding='same'))(dropout1)
+    max_pool = TimeDistributed(MaxPooling1D(pool_size=3, strides=2, padding='same'))(block_out1)
     block_out2 = Add()([conv2, max_pool])
 
     res_block_end = block_out2
 
-    for i in range(8):
+    for i in range(6):
         BN_layer_res_1 = BatchNormalization()(res_block_end)
         relu_res_1 = ReLU()(BN_layer_res_1)
-        conv_res_1 = Conv1D(filters=64, kernel_size=5, strides=1, padding='same')(relu_res_1)
+        conv_res_1 = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=1, padding='same'))(relu_res_1)
         BN_layer_res_2 = BatchNormalization()(conv_res_1)
         relu_res_2 = ReLU()(BN_layer_res_2)
         dropout_res = Dropout(0.5)(relu_res_2)
-        conv_res_2 = Conv1D(filters=64, kernel_size=5, strides=2, padding='same')(dropout_res)
-        max_pool_res = MaxPooling1D(pool_size=2, padding='same')(res_block_end)
+        conv_res_2 = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=2, padding='same'))(dropout_res)
+        max_pool_res = TimeDistributed(MaxPooling1D(pool_size=3, strides=2, padding='same'))(res_block_end)
         res_block_end = Add()([conv_res_2, max_pool_res])
 
     BN_output = BatchNormalization()(res_block_end)
@@ -248,16 +303,17 @@ def build_network_1lead(**params):
     # LSTM_output_1 = LSTM(32, return_sequences=True)(relu_output)
     # BN_output_1 = BatchNormalization()(LSTM_output_1)
     # relu_output_1 = ReLU()(BN_output_1)
-    LSTM_output_2 = LSTM(64)(relu_output)
+    reshape_output = Reshape((-1, 64*4))(relu_output)
+    LSTM_output_2 = LSTM(64)(reshape_output)
     BN_output_2 = BatchNormalization()(LSTM_output_2)
     relu_output_2 = ReLU()(BN_output_2)
 
-    output = Dense(9, activation='softmax')(relu_output_2)
+    output = Dense(1, activation='softmax')(relu_output_2)
 
     model = Model(inputs=inputs, outputs=output)
     optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
 
-    model.compile(loss=weighted_mse, optimizer=optimizer, metrics=['accuracy'])
+    model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=['accuracy'])
 
     print(model.summary())
 

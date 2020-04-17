@@ -11,7 +11,7 @@ import scipy.io as sio
 import tqdm
 import linecache
 
-STEP = 256
+STEP = 512
 
 def data_generator(batch_size, preproc, x, y):
     num_examples = len(x)
@@ -30,14 +30,12 @@ def data_generator(batch_size, preproc, x, y):
 class Preproc:
 
     def __init__(self, ecg, labels):
-        self.mean, self.std = compute_mean_std(ecg)
-        self.classes = sorted(set(l for label in labels for l in label))
-        self.int_to_class = dict( zip(range(len(self.classes)), self.classes))
-        self.class_to_int = {c : i for i, c in self.int_to_class.items()}
-        self.labels = ["AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"]
+        self.labels = {"AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"}
+        self.class_weight = self.calculate_weight(labels)
+        self.choose_label = 0
 
     def process(self, x, y):
-        return self.process_x(x), self.process_y(y)
+        return self.process_x(x), self.process_y(y)[:, self.choose_label]
 
     def process_x(self, x):
         x_cropped = crop(x)
@@ -62,6 +60,24 @@ class Preproc:
                     y_vector[i, j] = 1
 
         return y_vector
+
+    def calculate_weight(self, labels):
+        y_vectors = self.process_y(labels)
+        class_weight = []
+        total = y_vectors.shape[0]
+        for i in range(9):
+            pos = np.sum(y_vectors[:, i])
+            neg = total - pos
+            weight_for_0 = (1 / neg) * (total) / 2.0
+            weight_for_1 = (1 / pos) * (total) / 2.0
+            class_weight_i = {0: weight_for_0, 1: weight_for_1}
+            class_weight.append(class_weight_i)
+
+        return class_weight
+
+    def get_weight(self):
+        return self.class_weight[self.choose_label]
+
 
 def crop(x):
     min_len = min(i.shape[1] for i in x)
@@ -106,8 +122,8 @@ def load_dataset(directory, lead=0):
                     ecg = (ecg - means_expanded) / std_expanded
                 label = linecache.getline(label_file, 16)[5:-1]
 
-                with open(os.path.join(root, patient+".txt"), 'w') as f:
-                        f.write("%s" % label)
+                # with open(os.path.join(root, patient+".txt"), 'w') as f:
+                #         f.write("%s" % label)
 
                 ecgs.append(ecg)
                 labels.append(label)
@@ -131,7 +147,7 @@ def load_ecg(record):
 if __name__ == "__main__":
     # data_json = "examples/cinc17/train.json"
     # train = load_dataset(data_json)
-    data_directory = "Training_WFDB/all"
+    data_directory = "Training_WFDB/test"
     train = load_dataset(data_directory, 1)
     preproc = Preproc(*train)
     gen = data_generator(16, preproc, *train)
