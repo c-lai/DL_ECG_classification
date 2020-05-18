@@ -1,6 +1,6 @@
 from keras import backend as K
-from tensorflow import math as tfmath
-import os
+from network_util import weighted_mse, weighted_binary_crossentropy, weighted_cross_entropy
+
 
 def _bn_relu(layer, dropout=0, **params):
     from keras.layers import BatchNormalization
@@ -141,179 +141,226 @@ def build_network(**params):
     return model
 
 
-import numpy as np
-from keras.callbacks import Callback
-# from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
-from evaluate_12ECG_score import compute_beta_score
-
-class Metrics(Callback):
-    def __init__(self, val_data, batch_size, save_dir):
-        super().__init__()
-        self.validation_data = val_data
-        self.batch_size = batch_size
-        self.save_dir = save_dir
-
-        self.num_classes = 9
-        self.beta = 2
-
-    def on_train_begin(self, logs={}):
-        self.val_accuracy = []
-        self.val_f_measure = []
-        self.val_Fbeta_measure = []
-        self.val_Gbeta_measure = []
-        self.FG_mean = []
-
-    def on_epoch_end(self, epoch, logs={}):
-        val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
-        val_targ = self.validation_data[1]
-
-        val_pred_label = np.zeros((val_pred_score.shape[0], self.num_classes), dtype=int)
-        labels = np.argmax(val_pred_score, axis=1)
-        for i, label in enumerate(labels):
-            val_pred_label[i, label] = 1
-
-        accuracy, f_measure, Fbeta_measure, Gbeta_measure = compute_beta_score(val_targ, val_pred_label, self.beta,
-                                                                               self.num_classes)
-        FG_mean = np.mean([Fbeta_measure, Gbeta_measure])
-        self.val_accuracy.append(accuracy)
-        self.val_f_measure.append(f_measure)
-        self.val_Fbeta_measure.append(Fbeta_measure)
-        self.val_Gbeta_measure.append(Gbeta_measure)
-        self.FG_mean.append(FG_mean)
-        print(" - val_accuracy:% f - val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
-              % (accuracy, f_measure, Fbeta_measure, Gbeta_measure, FG_mean))
-
-        with open(os.path.join(self.save_dir, f"log-epoch{epoch+1:03d}-FG_mean{FG_mean:.3f}.txt"), 'a', encoding='utf-8') as f:
-            f.write("val_accuracy:% f \nval_f_measure:% f \nval_Fbeta_measure:% f \nval_Gbeta_measure:% f \nGeometric Mean:% f"
-              % (accuracy, f_measure, Fbeta_measure, Gbeta_measure, FG_mean))
-
-        return
-
-
-from sklearn.metrics import confusion_matrix
-
-class Metrics_single_class(Callback):
-    def __init__(self, val_data, batch_size, save_dir):
-        super().__init__()
-        self.validation_data = val_data
-        self.batch_size = batch_size
-        self.save_dir = save_dir
-
-        self.num_classes = 9
-        self.beta = 2
-
-    def on_train_begin(self, logs={}):
-        self.val_accuracy = []
-        self.val_f_measure = []
-        self.val_Fbeta_measure = []
-        self.val_Gbeta_measure = []
-        self.FG_mean = []
-
-    def on_epoch_end(self, epoch, logs={}):
-        val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
-        val_targ = self.validation_data[1]
-
-        # threshold = np.arange(0, 1, 0.001)
-        # tn = np.zeros(threshold.shape)
-        # fp = np.zeros(threshold.shape)
-        # fn = np.zeros(threshold.shape)
-        # tp = np.zeros(threshold.shape)
-        # for n, t in enumerate(threshold):
-        #     tn[n], fp[n], fn[n], tp[n] = confusion_matrix(val_targ, np.ceil(val_pred_score - t)).ravel()
-        # Fbeta_measure = (1 + self.beta ** 2) * tp / ((1 + self.beta ** 2) * tp + fp + self.beta ** 2 * fn)
-        # Gbeta_measure = tp / (tp + fp + self.beta * fn)
-        # FG_mean = (Fbeta_measure + Gbeta_measure) / 2
-        # best_threshold = threshold[np.argmax(FG_mean)]
-        best_threshold = 0.5
-
-        val_pred_label = np.ceil(val_pred_score - best_threshold)
-        TP = np.sum(val_pred_label * val_targ)
-        FP = np.sum(val_pred_label * (1 - val_targ))
-        FN = np.sum((1 - val_pred_label) * val_targ)
-        Fbeta_measure = (1 + self.beta ** 2) * TP / ((1 + self.beta ** 2) * TP + FP + self.beta ** 2 * FN)
-        Gbeta_measure = TP / (TP + FP + self.beta * FN)
-        FG_mean = (Fbeta_measure + Gbeta_measure) / 2
-        print("- beat_threshold: %f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
-              % (best_threshold, Fbeta_measure, Gbeta_measure, FG_mean))
-
-        with open(os.path.join(self.save_dir,
-                               f"log-epoch{epoch + 1:03d}-beat_threshold{best_threshold:.3f}-FG_mean{FG_mean:.3f}.txt"),
-                  'a', encoding='utf-8') as f:
-            f.write("beat_threshold: %f \nval_Fbeta_measure:% f \nval_Gbeta_measure:% f \nGeometric Mean:% f"
-                    % (best_threshold, Fbeta_measure, Gbeta_measure, FG_mean))
-
-        return
-
-
-def weighted_mse(yTrue,yPred):
-    class_weight = K.constant([[0.043], [0.073], [0.264],
-                               [0.057], [0.097], [0.084],
-                               [0.031], [0.067], [0.284]])
-    class_se = K.square(yPred-yTrue)
-    w_mse = K.dot(class_se, class_weight)
-    return K.sum(w_mse)
-
-
-def weighted_cross_entropy(yTrue,yPred):
-    class_weight = K.constant([[0.043], [0.073], [0.264],
-                               [0.057], [0.097], [0.084],
-                               [0.031], [0.067], [0.284]])
-    class_CE = -(tfmath.multiply(yTrue, K.log(yPred))+2*tfmath.multiply(1-yTrue, K.log(1-yPred)))
-    w_cross_entropy = K.dot(class_CE, class_weight)
-    return K.sum(w_cross_entropy)
-
-
-def build_network_1lead(**params):
-    from keras.models import Sequential, Model
-    from keras.layers import Dropout, Dense, Input, TimeDistributed, \
+def build_network_LSTM(**params):
+    from keras.models import Model
+    from keras.layers import SimpleRNN, Dropout, Dense, Input, TimeDistributed, \
         Lambda, concatenate, Reshape, LSTM, TimeDistributed, Conv1D, \
-        BatchNormalization, ReLU, Bidirectional, MaxPooling1D, Add, LeakyReLU, ELU
-    from keras.metrics import categorical_accuracy, top_k_categorical_accuracy
+        BatchNormalization, ReLU, Bidirectional
     from keras.optimizers import Adam
 
     inputs = Input(shape=[1, None])
-    reshape = Reshape((-1, 512, 1))(inputs)
-    conv = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=1, padding='same'))(reshape)
-    BN_layer = BatchNormalization()(conv)
-    block_out1 = ReLU()(BN_layer)
 
-    conv1 = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=1, padding='same'))(block_out1)
-    BN_layer1 = BatchNormalization()(conv1)
-    relu1 = ReLU()(BN_layer1)
-    dropout1 = Dropout(0.5)(relu1)
-    conv2 = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=2, padding='same'))(dropout1)
-    max_pool = TimeDistributed(MaxPooling1D(pool_size=3, strides=2, padding='same'))(block_out1)
-    block_out2 = Add()([conv2, max_pool])
+    rnn_layers = []
+    for i in range(1):
+        split = Lambda(lambda x: x[:, i, :])(inputs)
+        reshape = Reshape((-1, params['step']))(split)
+        LSTMlayer1 = LSTM(32, return_sequences=True)(reshape)
+        BN_layer1 = BatchNormalization()(LSTMlayer1)
+        relu_layer1 = ReLU()(BN_layer1)
+        dropout_1 = Dropout(0.3)(relu_layer1)
+        LSTMlayer2 = LSTM(32, return_sequences=True)(dropout_1)
+        BN_layer2 = BatchNormalization()(LSTMlayer2)
+        relu_layer2 = ReLU()(BN_layer2)
+        dropout_2 = Dropout(0.3)(relu_layer2)
+        LSTMlayer3 = LSTM(32, return_sequences=True)(dropout_2)
+        BN_layer3 = BatchNormalization()(LSTMlayer3)
+        relu_layer3 = ReLU()(BN_layer3)
+        dropout_3 = Dropout(0.3)(relu_layer3)
+        LSTMlayer4 = LSTM(32)(dropout_3)
+        BN_layer4 = BatchNormalization()(LSTMlayer4)
+        # relu_layer3 = ReLU()(BN_layer3)
+        rnn_layers.append(BN_layer4)
 
-    res_block_end = block_out2
-
-    for i in range(6):
-        BN_layer_res_1 = BatchNormalization()(res_block_end)
-        relu_res_1 = ReLU()(BN_layer_res_1)
-        conv_res_1 = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=1, padding='same'))(relu_res_1)
-        BN_layer_res_2 = BatchNormalization()(conv_res_1)
-        relu_res_2 = ReLU()(BN_layer_res_2)
-        dropout_res = Dropout(0.5)(relu_res_2)
-        conv_res_2 = TimeDistributed(Conv1D(filters=64, kernel_size=5, strides=2, padding='same'))(dropout_res)
-        max_pool_res = TimeDistributed(MaxPooling1D(pool_size=3, strides=2, padding='same'))(res_block_end)
-        res_block_end = Add()([conv_res_2, max_pool_res])
-
-    BN_output = BatchNormalization()(res_block_end)
-    relu_output = ReLU()(BN_output)
-    # LSTM_output_1 = LSTM(32, return_sequences=True)(relu_output)
-    # BN_output_1 = BatchNormalization()(LSTM_output_1)
-    # relu_output_1 = ReLU()(BN_output_1)
-    reshape_output = Reshape((-1, 64*4))(relu_output)
-    LSTM_output_2 = LSTM(64)(reshape_output)
-    BN_output_2 = BatchNormalization()(LSTM_output_2)
-    relu_output_2 = ReLU()(BN_output_2)
-
-    output = Dense(1, activation='softmax')(relu_output_2)
+    # merge_layer = concatenate(rnn_layers)
+    output = Dense(1, activation='sigmoid')(BN_layer4)
 
     model = Model(inputs=inputs, outputs=output)
     optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
 
-    model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=['accuracy'])
+    model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
+    print(model.summary())
+
+    return model
+
+
+def build_network_ResNet(**params):
+    from keras.models import Model
+    from keras.layers import Dropout, Dense, Input, \
+        Lambda, concatenate, Reshape, LSTM, TimeDistributed, Conv1D, \
+        BatchNormalization, ReLU, Bidirectional, MaxPooling1D, Add
+    from keras.optimizers import Adam, RMSprop
+    from keras.initializers import glorot_normal
+
+    inputs = Input(shape=[1, None])
+
+    input_reshape = Reshape((-1, 1))(inputs)
+    conv_1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(input_reshape)
+    bn_1 = BatchNormalization()(conv_1)
+    relu_1 = ReLU()(bn_1)
+    block_end_1 = relu_1
+
+    conv_2_1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(block_end_1)
+    bn_2 = BatchNormalization()(conv_2_1)
+    relu_2 = ReLU()(bn_2)
+    dropout_2 = Dropout(0.5)(relu_2)
+    conv_2_2 = Conv1D(filters=32, kernel_size=5, strides=2, padding='same')(dropout_2)
+    max_pool_2 = MaxPooling1D(pool_size=2, strides=2, padding='same')(block_end_1)
+    block_end_2 = Add()([conv_2_2, max_pool_2])
+
+    block_end = block_end_2
+
+    # ResNet blocks
+    for i in range(params["block_num"]):
+        bn_block_1 = BatchNormalization()(block_end)
+        relu_block_1 = ReLU()(bn_block_1)
+        conv_block_1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(relu_block_1)
+        bn_block_2 = BatchNormalization()(conv_block_1)
+        relu_block_2 = ReLU()(bn_block_2)
+        dropout_block = Dropout(0.5)(relu_block_2)
+        conv_block_2 = Conv1D(filters=32, kernel_size=5, strides=2, padding='same')(dropout_block)
+        max_pool_block = MaxPooling1D(pool_size=2, strides=2, padding='same')(block_end)
+        block_end = Add()([conv_block_2, max_pool_block])
+
+    bn_output_1 = BatchNormalization()(block_end)
+    relu_output_1 = ReLU()(bn_output_1)
+    LSTM_output = LSTM(32)(relu_output_1)
+    bn_output_2 = BatchNormalization()(LSTM_output)
+    relu_output_2 = ReLU()(bn_output_2)
+
+    output = Dense(9, activation='sigmoid')(relu_output_2)
+
+    model = Model(inputs=inputs, outputs=output)
+
+    optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
+
+    model.compile(loss=weighted_binary_crossentropy, optimizer=optimizer,
+                  metrics=['categorical_accuracy'])
+
+    print(model.summary())
+
+    return model
+
+
+def build_network_ResNet_TimeDistributed(**params):
+    from keras.models import Model
+    from keras.layers import Dropout, Dense, Input, \
+        Lambda, concatenate, Reshape, LSTM, TimeDistributed, Conv1D, \
+        BatchNormalization, ReLU, Bidirectional, MaxPooling1D, Add
+    from keras.optimizers import Adam, RMSprop
+    from keras.initializers import glorot_normal
+
+    inputs = Input(shape=[1, None])
+
+    input_reshape = Reshape((-1, params['step'], 1))(inputs)
+    conv_1 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=1, padding='same'))(input_reshape)
+    bn_1 = BatchNormalization()(conv_1)
+    relu_1 = ReLU()(bn_1)
+    block_end_1 = relu_1
+
+    conv_2_1 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=1, padding='same'))(block_end_1)
+    bn_2 = BatchNormalization()(conv_2_1)
+    relu_2 = ReLU()(bn_2)
+    dropout_2 = Dropout(0.5)(relu_2)
+    conv_2_2 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=2, padding='same'))(dropout_2)
+    max_pool_2 = TimeDistributed(MaxPooling1D(pool_size=2, strides=2, padding='same'))(block_end_1)
+    block_end_2 = Add()([conv_2_2, max_pool_2])
+
+    block_end = block_end_2
+
+    # ResNet blocks
+    for i in range(params["block_num"]):
+        bn_block_1 = BatchNormalization()(block_end)
+        relu_block_1 = ReLU()(bn_block_1)
+        conv_block_1 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=1, padding='same'))(relu_block_1)
+        bn_block_2 = BatchNormalization()(conv_block_1)
+        relu_block_2 = ReLU()(bn_block_2)
+        dropout_block = Dropout(0.5)(relu_block_2)
+        conv_block_2 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=2, padding='same'))(dropout_block)
+        max_pool_block = TimeDistributed(MaxPooling1D(pool_size=2, strides=2, padding='same'))(block_end)
+        block_end = Add()([conv_block_2, max_pool_block])
+
+    bn_output_1 = BatchNormalization()(block_end)
+    relu_output_1 = ReLU()(bn_output_1)
+    reshape_output = Reshape((-1, int(32 * params['step']/(2**(params["block_num"]+1)))))(relu_output_1)
+    LSTM_output = LSTM(32)(reshape_output)
+    bn_output_2 = BatchNormalization()(LSTM_output)
+    relu_output_2 = ReLU()(bn_output_2)
+
+    output = Dense(9, activation='sigmoid')(relu_output_2)
+
+    model = Model(inputs=inputs, outputs=output)
+
+    optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
+
+    model.compile(loss=weighted_binary_crossentropy, optimizer=optimizer,
+                  metrics=['categorical_accuracy'])
+
+    print(model.summary())
+
+    return model
+
+
+def build_network_ResNet_12leads(**params):
+    from keras.models import Model
+    from keras.layers import Dropout, Dense, Input, \
+        Lambda, concatenate, Reshape, LSTM, TimeDistributed, Conv1D, \
+        BatchNormalization, ReLU, Bidirectional, MaxPooling1D, Add
+    from keras.optimizers import Adam, RMSprop
+    from keras.initializers import glorot_normal
+
+    leads_num = 12
+    inputs = Input(shape=[leads_num, None])
+
+    leads_networks = []
+    for i in range(leads_num):
+        split = Lambda(lambda x: x[:, i, :])(inputs)
+        conv_1 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=1, padding='same'))(split)
+        bn_1 = BatchNormalization()(conv_1)
+        relu_1 = ReLU()(bn_1)
+        block_end_1 = relu_1
+
+        conv_2_1 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=1, padding='same'))(block_end_1)
+        bn_2 = BatchNormalization()(conv_2_1)
+        relu_2 = ReLU()(bn_2)
+        dropout_2 = Dropout(0.5)(relu_2)
+        conv_2_2 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=2, padding='same'))(dropout_2)
+        max_pool_2 = TimeDistributed(MaxPooling1D(pool_size=2, strides=2, padding='same'))(block_end_1)
+        block_end_2 = Add()([conv_2_2, max_pool_2])
+
+        block_end = block_end_2
+
+        # ResNet blocks
+        for i in range(params["block_num"]):
+            bn_block_1 = BatchNormalization()(block_end)
+            relu_block_1 = ReLU()(bn_block_1)
+            conv_block_1 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=1, padding='same'))(relu_block_1)
+            bn_block_2 = BatchNormalization()(conv_block_1)
+            relu_block_2 = ReLU()(bn_block_2)
+            dropout_block = Dropout(0.5)(relu_block_2)
+            conv_block_2 = TimeDistributed(Conv1D(filters=32, kernel_size=5, strides=2, padding='same'))(dropout_block)
+            max_pool_block = TimeDistributed(MaxPooling1D(pool_size=2, strides=2, padding='same'))(block_end)
+            block_end = Add()([conv_block_2, max_pool_block])
+
+        bn_output_1 = BatchNormalization()(block_end)
+        relu_output_1 = ReLU()(bn_output_1)
+        LSTM_output = LSTM(32)(relu_output_1)
+        bn_output_2 = BatchNormalization()(LSTM_output)
+        relu_output_2 = ReLU()(bn_output_2)
+
+        leads_networks.append(relu_output_2)
+
+    merge_layer = concatenate(leads_networks)
+    dense_1 = Dense(32, activation='relu')(merge_layer)
+    dense_2 = Dense(32, activation='relu')(dense_1)
+    output = Dense(9, activation='sigmoid')(dense_2)
+
+    model = Model(inputs=inputs, outputs=output)
+
+    optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
+
+    model.compile(loss=weighted_binary_crossentropy, optimizer=optimizer,
+                  metrics=['categorical_accuracy'])
 
     print(model.summary())
 

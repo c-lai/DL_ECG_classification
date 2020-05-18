@@ -15,11 +15,16 @@ import time
 import network
 import load
 import util
+import network_util
 
+# set random seed
+# for reproducible results, optimizer can't be Adam (can use RMSprop instead)
+seed_value = 5
+os.environ['PYTHONHASHSEED'] = str(seed_value)
+np.random.seed(seed_value)
+tf.random.set_seed(seed_value)
 
-# physical_devices = tf.config.experimental.list_physical_devices('GPU')
-# tf.config.experimental.set_memory_growth(physical_devices[0], True)
-
+# configure GPU
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
   # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
@@ -32,6 +37,7 @@ if gpus:
   except RuntimeError as e:
     # Virtual devices must be set before GPUs have been initialized
     print(e)
+
 
 MAX_EPOCHS = 100
 
@@ -47,7 +53,6 @@ def get_filename_for_saving(save_dir):
             "epoch{epoch:03d}-val_loss{val_loss:.3f}-train_loss{loss:.3f}.hdf5")
 
 def train(args, params):
-
     print("Loading training set...")
     train = load.load_dataset(params['train'], params['lead'])
     print("Loading dev set...")
@@ -57,24 +62,13 @@ def train(args, params):
     print("Training size: " + str(len(train[0])) + " examples.")
     print("Dev size: " + str(len(dev[0])) + " examples.")
 
-
     save_dir = make_save_dir(params['save_dir'], args.experiment)
 
     util.save(preproc, save_dir)
 
-    # params.update({
-    #     "input_shape": [None, 1],
-    #     "num_categories": len(preproc.classes)
-    # })
+    random.seed(seed_value)
 
-    # model = network.build_network(**params)
-    model = network.build_network_1lead(**params)
-    # model_path = ".\\save\\lead1_ResNet8_64_WMSE\\1586361669-991\\epoch017-val_loss0.392-train_loss0.179.hdf5"
-    # model_path = ".\\save\\lead2_ResNet8_64_WMSE\\1586365719-237\\epoch015-val_loss0.251-train_loss0.202.hdf5"
-    # model_path = ".\\save\\lead4_ResNet8_64_WMSE\\1586384117-946\\epoch021-val_loss0.466-train_loss0.194.hdf5"
-    # model = keras.models.load_model(model_path,
-    #                                 custom_objects={'weighted_mse': network.weighted_mse,
-    #                                                 'weighted_cross_entropy': network.weighted_cross_entropy})
+    model = network.build_network_ResNet(**params)
 
     stopping = keras.callbacks.EarlyStopping(patience=15)
 
@@ -91,7 +85,8 @@ def train(args, params):
 
     batch_size = params.get("batch_size", 4)
 
-    metrics = network.Metrics_single_class(preproc.process(dev[0], dev[1]), batch_size=batch_size, save_dir = save_dir)
+    metrics = network_util.Metrics_multi_class(preproc.process(train[0], train[1]), preproc.process(dev[0], dev[1]),
+                                               save_dir=save_dir)
 
     if params.get("generator", False):
         train_gen = load.data_generator(batch_size, preproc, *train)
@@ -102,8 +97,9 @@ def train(args, params):
             epochs=MAX_EPOCHS,
             validation_data=dev_gen,
             validation_steps=int(len(dev[0]) / batch_size),
-            class_weight=preproc.get_weight(),
-            callbacks=[checkpointer, metrics, reduce_lr, stopping])
+            # class_weight=preproc.get_weight(), #for single class models
+            callbacks=[checkpointer, metrics, reduce_lr, stopping],
+            shuffle=True)
     else:
         train_x, train_y = preproc.process(*train)
         dev_x, dev_y = preproc.process(*dev)
@@ -112,7 +108,7 @@ def train(args, params):
             batch_size=batch_size,
             epochs=MAX_EPOCHS,
             validation_data=(dev_x, dev_y),
-            callbacks=[checkpointer, reduce_lr, stopping])
+            callbacks=[checkpointer, metrics, reduce_lr, stopping])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

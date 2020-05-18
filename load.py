@@ -2,8 +2,6 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-import json
-import keras
 import numpy as np
 import os
 import random
@@ -16,7 +14,7 @@ STEP = 512
 def data_generator(batch_size, preproc, x, y):
     num_examples = len(x)
     examples = zip(x, y)
-    examples = sorted(examples, key = lambda x: x[0].shape[0])
+    examples = sorted(examples, key=lambda x: x[0].shape[0])
     end = num_examples - batch_size + 1
     batches = [examples[i:i+batch_size]
                 for i in range(0, end, batch_size)]
@@ -30,12 +28,16 @@ def data_generator(batch_size, preproc, x, y):
 class Preproc:
 
     def __init__(self, ecg, labels):
-        self.labels = {"AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"}
+        self.labels = ("AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE")
         self.class_weight = self.calculate_weight(labels)
-        self.choose_label = 0
+        self.choose_label = range(9)
+        self.choose_leads = [11]
 
     def process(self, x, y):
-        return self.process_x(x), self.process_y(y)[:, self.choose_label]
+        # single lead
+        return self.process_x(x)[:, self.choose_leads, :], self.process_y(y)[:, self.choose_label]
+        # # all leads
+        # return self.process_x(x), self.process_y(y)[:, self.choose_label]
 
     def process_x(self, x):
         x_cropped = crop(x)
@@ -78,6 +80,9 @@ class Preproc:
     def get_weight(self):
         return self.class_weight[self.choose_label]
 
+    def get_all_weight(self):
+        return self.class_weight
+
 
 def crop(x):
     min_len = min(i.shape[1] for i in x)
@@ -111,28 +116,20 @@ def load_dataset(directory, lead=0):
                 if lead:
                     ecg = np.reshape(load_ecg(ecg_file)[lead-1, :], (1, -1))
                     ecg_mean = np.mean(ecg).astype(np.float32)
-                    ecg_std = np.std(ecg).astype(np.float32)
+                    ecg_std = (np.std(ecg)+0.001).astype(np.float32)
                     ecg = (ecg - ecg_mean) / ecg_std
                 else:
                     ecg = load_ecg(ecg_file)
                     ecg_mean = np.mean(ecg, axis=1).astype(np.float32)
-                    ecg_std = np.std(ecg, axis=1).astype(np.float32)
+                    ecg_std = (np.std(ecg, axis=1)+0.001).astype(np.float32)
                     means_expanded = np.outer(ecg_mean, np.ones(ecg.shape[1]))
                     std_expanded = np.outer(ecg_std, np.ones(ecg.shape[1]))
                     ecg = (ecg - means_expanded) / std_expanded
                 label = linecache.getline(label_file, 16)[5:-1]
 
-                # with open(os.path.join(root, patient+".txt"), 'w') as f:
-                #         f.write("%s" % label)
-
                 ecgs.append(ecg)
                 labels.append(label)
 
-    # with open(data_json, 'r') as fid:
-    #     data = [json.loads(l) for l in fid]
-    # for d in tqdm.tqdm(data_file):
-    #     labels.append(d['labels'])
-    #     ecgs.append(load_ecg(d['ecg']))
     return ecgs, labels
 
 def load_ecg(record):
@@ -141,16 +138,15 @@ def load_ecg(record):
     elif os.path.splitext(record)[1] == ".mat":
         ecg = sio.loadmat(record)['val'].squeeze()
 
-    trunc_samp = STEP * int(ecg.shape[1] / STEP)
+    trunc_samp = STEP * min([int(ecg.shape[1] / STEP), 8])
     return ecg[:, :trunc_samp]
 
 if __name__ == "__main__":
-    # data_json = "examples/cinc17/train.json"
-    # train = load_dataset(data_json)
-    data_directory = "Training_WFDB/test"
-    train = load_dataset(data_directory, 1)
+
+    data_directory = "Training_WFDB/all"
+    train = load_dataset(data_directory, False)
     preproc = Preproc(*train)
-    gen = data_generator(16, preproc, *train)
+    gen = data_generator(8, preproc, *train)
     for x, y in gen:
         print(x.shape, y.shape)
         break

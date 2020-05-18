@@ -1,97 +1,17 @@
-from __future__ import print_function
-
-import argparse
 import numpy as np
 import keras
-import tensorflow as tf
 import os
 
 import load
 import util
 from keras import Model
-from network import weighted_mse, weighted_cross_entropy
+from network import weighted_mse, weighted_cross_entropy, weighted_binary_crossentropy
 from scipy.io import savemat
 from get_12ECG_features import get_12ECG_features
-from scipy.io import loadmat
-
-def load_challenge_data(filename):
-    x = loadmat(filename)
-    data = np.asarray(x['val'], dtype=np.float64)
-
-    new_file = filename.replace('.mat', '.hea')
-    input_header_file = os.path.join(new_file)
-
-    with open(input_header_file, 'r') as f:
-        header_data = f.readlines()
-
-    return data, header_data
-
-
-def save_challenge_predictions(output_directory, filename, scores, labels, classes):
-    recording = os.path.splitext(filename)[0]
-    new_file = filename.replace('.mat', '.csv')
-    output_file = os.path.join(output_directory, new_file)
-
-    # Include the filename as the recording number
-    recording_string = '#{}'.format(recording)
-    class_string = ','.join(classes)
-    label_string = ','.join(str(i) for i in labels)
-    score_string = ','.join(str(i) for i in scores)
-
-    with open(output_file, 'w') as f:
-        f.write(recording_string + '\n' + class_string + '\n' + label_string + '\n' + score_string + '\n')
-
-
-# Find unique number of classes
-def get_classes(input_directory, files):
-    classes = set()
-    for f in files:
-        g = f.replace('.mat', '.hea')
-        input_file = os.path.join(input_directory, g)
-        with open(input_file, 'r') as f:
-            for lines in f:
-                if lines.startswith('#Dx'):
-                    tmp = lines.split(': ')[1].split(',')
-                    for c in tmp:
-                        classes.add(c.strip())
-
-    return sorted(classes)
-
-
-# physical_devices = tf.config.experimental.list_physical_devices('GPU')
-# tf.config.experimental.set_memory_growth(physical_devices[0], True)
-
-data_path_train = ".\\Training_WFDB\\train"
-data_path_dev = ".\\Training_WFDB\\dev"
-data_path_all = ".\\Training_WFDB\\all"
-
-
-# lead1_model_path = ".\\save\\lead1_final\\epoch014-val_loss0.442-train_loss0.197.hdf5"
-# lead_1 = 1
-#
-# lead2_model_path = ".\\save\\lead2_final\\epoch020-val_loss0.044-train_loss0.109.hdf5"
-# lead_2 = 2
-#
-# lead4_model_path = ".\\save\\lead4_final\\epoch027-val_loss0.380-train_loss0.208.hdf5"
-# lead_4 = 4
-
-# model_path_5 = ".\\save\\lead1_ResNet16_WMSE\\1586231660-902\\epoch030-val_loss0.393-train_loss0.236.hdf5"
-# lead_5 = 5
-#
-# model_path_6 = ".\\save\\lead1_ResNet16_WMSE\\1586231660-902\\epoch030-val_loss0.393-train_loss0.236.hdf5"
-# lead_6 = 6
-
-leads = [1, 2, 4]
-lead1_model_path = ".\\save\\lead1_final\\epoch014-val_loss0.442-train_loss0.197.hdf5"
-lead2_model_path = ".\\save\\lead2_final\\epoch020-val_loss0.044-train_loss0.109.hdf5"
-lead4_model_path = ".\\save\\lead4_final\\epoch027-val_loss0.380-train_loss0.208.hdf5"
-# lead5_model_path = ".\\save\\lead1_ResNet8_64_WMSE\\1586365571-169\\epoch014-val_loss0.131-train_loss0.197.hdf5"
-# lead6_model_path = ".\\save\\lead1_ResNet8_64_WMSE\\1586365571-169\\epoch014-val_loss0.131-train_loss0.197.hdf5"
-# final_model_path = ".\\save\\lead1_ResNet8_64_WMSE\\1586365571-169\\epoch014-val_loss0.131-train_loss0.197.hdf5"
 
 
 def get_12ECG_features_all(data, header_data, model):
-    preproc = util.load(os.path.dirname(lead1_model_path))
+    preproc = util.load(os.path.dirname(leads_model_path['lead1']))
     dataset = (np.expand_dims(data, axis=0), header_data[15][5:-1])
 
     features_NN = []
@@ -112,257 +32,91 @@ def get_12ECG_features_all(data, header_data, model):
 
     return features, data_y
 
-#############################################################################
-preproc_1 = util.load(os.path.dirname(lead1_model_path))
-model_1 = keras.models.load_model(lead1_model_path,
-                                custom_objects=
-                                {'weighted_mse': weighted_mse, 'weighted_cross_entropy': weighted_cross_entropy})
-feature_model_1 = Model(inputs=model_1.input, outputs=model_1.layers[-4].output)
-dataset_1_dev = load.load_dataset(data_path_dev, leads[0])
-x_1_dev, y_1_dev = preproc_1.process(*dataset_1_dev)
-features_1_dev = feature_model_1.predict(x_1_dev, verbose=1)
+# path for data
+data_path_train = ".\\Training_WFDB\\train"
+data_path_dev = ".\\Training_WFDB\\dev"
+data_path_all = ".\\Training_WFDB\\all"
 
-dataset_1_train = load.load_dataset(data_path_train, leads[0])
-x_1_train, y_1_train = preproc_1.process(*dataset_1_train)
-features_1_train = feature_model_1.predict(x_1_train, verbose=1)
+# path for lead models
+leads = range(1, 13)
+leads_model_path = {'lead1': ".\\save\\lead1_ResNet8_32_WCE\\epoch022-val_loss0.393-train_loss0.316.hdf5",
+                    'lead2': ".\\save\\lead2_ResNet8_32_WCE\\epoch045-val_loss0.217-train_loss0.247.hdf5",
+                    'lead3': ".\\save\\lead3_ResNet8_32_WCE\\epoch024-val_loss0.291-train_loss0.329.hdf5",
+                    'lead4': ".\\save\\lead4_ResNet8_32_WCE\\epoch029-val_loss0.194-train_loss0.208.hdf5",
+                    'lead5': ".\\save\\lead5_ResNet8_32_WCE\\epoch030-val_loss0.354-train_loss0.319.hdf5",
+                    'lead6': ".\\save\\lead6_ResNet8_32_WCE\\epoch025-val_loss0.331-train_loss0.322.hdf5",
+                    'lead7': ".\\save\\lead7_ResNet8_32_WCE\\epoch030-val_loss0.315-train_loss0.298.hdf5",
+                    'lead8': ".\\save\\lead8_ResNet8_32_WCE\\epoch024-val_loss0.614-train_loss0.318.hdf5",
+                    'lead9': ".\\save\\lead9_ResNet8_32_WCE\\epoch023-val_loss0.278-train_loss0.287.hdf5",
+                    'lead10': ".\\save\\lead10_ResNet8_32_WCE\\epoch039-val_loss0.307-train_loss0.282.hdf5",
+                    'lead11': ".\\save\\lead11_ResNet8_32_WCE\\epoch027-val_loss0.485-train_loss0.320.hdf5",
+                    'lead12': ".\\save\\lead12_ResNet8_32_WCE\\epoch018-val_loss0.843-train_loss0.339.hdf5"}
 
-dataset_1_all = load.load_dataset(data_path_all, leads[0])
-x_1_all, y_1_all = preproc_1.process(*dataset_1_all)
-features_1_all = feature_model_1.predict(x_1_all, verbose=1)
+# load data
+dataset_dev = load.load_dataset(data_path_dev, False)
+dataset_train = load.load_dataset(data_path_train, False)
+dataset_all = load.load_dataset(data_path_all, False)
 
-
-preproc_2 = util.load(os.path.dirname(lead2_model_path))
-model_2 = keras.models.load_model(lead2_model_path,
-                                custom_objects=
-                                {'weighted_mse': weighted_mse, 'weighted_cross_entropy': weighted_cross_entropy})
-feature_model_2 = Model(inputs=model_2.input, outputs=model_2.layers[-4].output)
-dataset_2_dev = load.load_dataset(data_path_dev, leads[1])
-x_2_dev, y_2_dev = preproc_2.process(*dataset_2_dev)
-features_2_dev = feature_model_2.predict(x_2_dev, verbose=1)
-
-dataset_2_train = load.load_dataset(data_path_train, leads[1])
-x_2_train, y_2_train = preproc_2.process(*dataset_2_train)
-features_2_train = feature_model_2.predict(x_2_train, verbose=1)
-
-dataset_2_all = load.load_dataset(data_path_all, leads[1])
-x_2_all, y_2_all = preproc_2.process(*dataset_2_all)
-features_2_all = feature_model_2.predict(x_2_all, verbose=1)
-
-
-preproc_4 = util.load(os.path.dirname(lead4_model_path))
-model_4 = keras.models.load_model(lead4_model_path,
-                                custom_objects=
-                                {'weighted_mse': weighted_mse, 'weighted_cross_entropy': weighted_cross_entropy})
-feature_model_4 = Model(inputs=model_4.input, outputs=model_4.layers[-4].output)
-dataset_4_dev = load.load_dataset(data_path_dev, leads[2])
-x_4_dev, y_4_dev = preproc_4.process(*dataset_4_dev)
-features_4_dev = feature_model_4.predict(x_4_dev, verbose=1)
-
-dataset_4_train = load.load_dataset(data_path_train, leads[2])
-x_4_train, y_4_train = preproc_4.process(*dataset_4_train)
-features_4_train = feature_model_4.predict(x_4_train, verbose=1)
-
-dataset_4_all = load.load_dataset(data_path_all, leads[2])
-x_4_all, y_4_all = preproc_4.process(*dataset_4_all)
-features_4_all = feature_model_4.predict(x_4_all, verbose=1)
-
-
-# model_5 = keras.models.load_model(model_path_5,
-#                                 custom_objects=
-#                                 {'weighted_mse': weighted_mse, 'weighted_cross_entropy': weighted_cross_entropy})
-# feature_model_5 = Model(inputs=model_5.input, outputs=model_5.layers[-2].output)
-# dataset_5_dev = load.load_dataset(data_path_dev, lead_5)
-# x_5_dev, y_5_dev = preproc.process(*dataset_5_dev)
-# features_5_dev = feature_model_5.predict(x_5_dev, verbose=1)
-#
-# dataset_5_train = load.load_dataset(data_path_train, lead_5)
-# x_5_train, y_5_train = preproc.process(*dataset_5_train)
-# features_5_train = feature_model_5.predict(x_5_train, verbose=1)
-#
-#
-# model_6 = keras.models.load_model(model_path_6,
-#                                 custom_objects=
-#                                 {'weighted_mse': weighted_mse, 'weighted_cross_entropy': weighted_cross_entropy})
-# feature_model_6 = Model(inputs=model_6.input, outputs=model_6.layers[-2].output)
-# dataset_6_dev = load.load_dataset(data_path_dev, lead_6)
-# x_6_dev, y_6_dev = preproc.process(*dataset_6_dev)
-# features_6_dev = feature_model_6.predict(x_6_dev, verbose=1)
-#
-# dataset_6_train = load.load_dataset(data_path_train, lead_6)
-# x_6_train, y_6_train = preproc.process(*dataset_6_train)
-# features_6_train = feature_model_6.predict(x_6_train, verbose=1)
-
-####################################################################
-# lead1_model = keras.models.load_model(lead1_model_path,
-#                                       custom_objects={'weighted_mse': weighted_mse,
-#                                                       'weighted_cross_entropy': weighted_cross_entropy})
-# lead2_model = keras.models.load_model(lead2_model_path,
-#                                       custom_objects={'weighted_mse': weighted_mse,
-#                                                       'weighted_cross_entropy': weighted_cross_entropy})
-# lead4_model = keras.models.load_model(lead4_model_path,
-#                                       custom_objects={'weighted_mse': weighted_mse,
-#                                                       'weighted_cross_entropy': weighted_cross_entropy})
-# # lead5_model = keras.models.load_model(lead5_model_path,
-# #                                       custom_objects={'weighted_mse': weighted_mse,
-# #                                                       'weighted_cross_entropy': weighted_cross_entropy})
-# # lead6_model = keras.models.load_model(lead6_model_path,
-# #                                       custom_objects={'weighted_mse': weighted_mse,
-# #                                                       'weighted_cross_entropy': weighted_cross_entropy})
-# # final_model = keras.models.load_model(final_model_path,
-# #                                       custom_objects={'weighted_mse': weighted_mse,
-# #                                                       'weighted_cross_entropy': weighted_cross_entropy})
-#
-# loaded_models = [lead1_model, lead2_model, lead4_model]
-
-####################################################################
-input_directory = data_path_train
-
-# Find files.
-input_files = []
-for f in os.listdir(input_directory):
-    if os.path.isfile(os.path.join(input_directory, f)) and not f.lower().startswith('.') and f.lower().endswith(
-                'mat'):
-        input_files.append(f)
-
-classes = get_classes(input_directory, input_files)
-
-# Iterate over files.
-print('Extracting 12ECG features...')
-num_files = len(input_files)
-
-features_train = []
-y_train = []
-features_bm_1_train = []
-features_bm_2_train = []
-features_bm_4_train = []
-for i, f in enumerate(input_files):
-    print('    {}/{}...'.format(i + 1, num_files))
-    tmp_input_file = os.path.join(input_directory, f)
-    data, header_data = load_challenge_data(tmp_input_file)
-
-    # feature_train_i, y_train_i = get_12ECG_features_all(data, header_data, loaded_models)
-    # features_train.append(feature_train_i)
-    # y_train.append(y_train_i)
-
-    features_bm_1_train_i = [get_12ECG_features(data, header_data, 1)]
-    features_bm_1_train.append(features_bm_1_train_i)
-    features_bm_2_train_i = [get_12ECG_features(data, header_data, 2)]
-    features_bm_2_train.append(features_bm_2_train_i)
-    features_bm_4_train_i = [get_12ECG_features(data, header_data, 4)]
-    features_bm_4_train.append(features_bm_4_train_i)
-
-# features_train_mat = np.concatenate(features_train)
-# y_train_mat = np.concatenate(y_train)
-features_bm_1_train_mat = np.concatenate(features_bm_1_train)
-features_bm_2_train_mat = np.concatenate(features_bm_2_train)
-features_bm_4_train_mat = np.concatenate(features_bm_4_train)
-
-
-####################################################################
-input_directory = data_path_dev
-
-# Find files.
-input_files = []
-for f in os.listdir(input_directory):
-    if os.path.isfile(os.path.join(input_directory, f)) and not f.lower().startswith('.') and f.lower().endswith(
-            'mat'):
-        input_files.append(f)
-
-classes = get_classes(input_directory, input_files)
-
-# Iterate over files.
-print('Extracting 12ECG features...')
-num_files = len(input_files)
-
+# load models and calculate features
 features_dev = []
-y_dev = []
-features_bm_1_dev = []
-features_bm_2_dev = []
-features_bm_4_dev = []
-for i, f in enumerate(input_files):
-    print('    {}/{}...'.format(i + 1, num_files))
-    tmp_input_file = os.path.join(input_directory, f)
-    data, header_data = load_challenge_data(tmp_input_file)
-
-    # feature_dev_i, y_dev_i = get_12ECG_features_all(data, header_data, loaded_models)
-    # features_dev.append(feature_dev_i)
-    # y_dev.append(y_dev_i)
-
-    features_bm_1_dev_i = [get_12ECG_features(data, header_data, 1)]
-    features_bm_1_dev.append(features_bm_1_dev_i)
-    features_bm_2_dev_i = [get_12ECG_features(data, header_data, 2)]
-    features_bm_2_dev.append(features_bm_2_dev_i)
-    features_bm_4_dev_i = [get_12ECG_features(data, header_data, 4)]
-    features_bm_4_dev.append(features_bm_4_dev_i)
-
-# features_dev_mat = np.concatenate(features_dev)
-# y_dev_mat = np.concatenate(y_dev)
-features_bm_1_dev_mat = np.concatenate(features_bm_1_dev)
-features_bm_2_dev_mat = np.concatenate(features_bm_2_dev)
-features_bm_4_dev_mat = np.concatenate(features_bm_4_dev)
-
-####################################################################
-input_directory = data_path_all
-
-# Find files.
-input_files = []
-for f in os.listdir(input_directory):
-    if os.path.isfile(os.path.join(input_directory, f)) and not f.lower().startswith('.') and f.lower().endswith(
-            'mat'):
-        input_files.append(f)
-
-classes = get_classes(input_directory, input_files)
-
-# Iterate over files.
-print('Extracting 12ECG features...')
-num_files = len(input_files)
-
+features_train = []
 features_all = []
-y_all = []
-features_bm_1_all = []
-features_bm_2_all = []
-features_bm_4_all = []
-for i, f in enumerate(input_files):
-    print('    {}/{}...'.format(i + 1, num_files))
-    tmp_input_file = os.path.join(input_directory, f)
-    data, header_data = load_challenge_data(tmp_input_file)
+for i, lead in enumerate(leads):
+    preproc_i = util.load(os.path.dirname(leads_model_path['lead'+str(lead)]))
+    model_i = keras.models.load_model(leads_model_path['lead'+str(lead)],
+                                      custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy})
+    feature_model_i = Model(inputs=model_i.input, outputs=model_i.layers[-3].output)
 
-    # feature_all_i, y_all_i = get_12ECG_features_all(data, header_data, loaded_models)
-    # features_all.append(feature_all_i)
-    # y_all.append(y_all_i)
+    x_dev_i, y_dev_i = preproc_i.process(*dataset_dev)
+    features_dev_i = feature_model_i.predict(x_dev_i, verbose=1)
+    features_dev.append(features_dev_i)
 
-    features_bm_1_all_i = [get_12ECG_features(data, header_data, 1)]
-    features_bm_1_all.append(features_bm_1_all_i)
-    features_bm_2_all_i = [get_12ECG_features(data, header_data, 2)]
-    features_bm_2_all.append(features_bm_2_all_i)
-    features_bm_4_all_i = [get_12ECG_features(data, header_data, 4)]
-    features_bm_4_all.append(features_bm_4_all_i)
+    x_train_i, y_train_i = preproc_i.process(*dataset_train)
+    features_train_i = feature_model_i.predict(x_train_i, verbose=1)
+    features_train.append(features_train_i)
 
-# features_all_mat = np.concatenate(features_all)
-# y_all_mat = np.concatenate(y_all)
-features_bm_1_all_mat = np.concatenate(features_bm_1_all)
-features_bm_2_all_mat = np.concatenate(features_bm_2_all)
-features_bm_4_all_mat = np.concatenate(features_bm_4_all)
+    x_all_i, y_all_i = preproc_i.process(*dataset_all)
+    features_all_i = feature_model_i.predict(x_all_i, verbose=1)
+    features_all.append(features_all_i)
 
-####################################################################
-savemat('features_dev_final.mat', {'features_1_dev':features_1_dev, 'features_2_dev':features_2_dev,
-                             'features_4_dev':features_4_dev})
-savemat('features_train_final.mat', {'features_1_train':features_1_train, 'features_2_train':features_2_train,
-                               'features_4_train':features_4_train})
-savemat('features_all_final.mat', {'features_1_all':features_1_all, 'features_2_all':features_2_all,
-                               'features_4_all':features_4_all})
-savemat('features_bm_dev.mat', {'features_bm_1_dev':features_bm_1_dev_mat, 'features_bm_2_dev':features_bm_2_dev_mat,
-                                'features_bm_4_dev':features_bm_4_dev_mat})
-savemat('features_bm_train.mat', {'features_bm_1_train':features_bm_1_train_mat, 'features_bm_2_train':features_bm_2_train_mat,
-                                  'features_bm_4_train':features_bm_4_train_mat})
-savemat('features_bm_all.mat', {'features_bm_1_all':features_bm_1_all_mat, 'features_bm_2_all':features_bm_2_all_mat,
-                                  'features_bm_4_all':features_bm_4_all_mat})
-# savemat('y_dev_32.mat', {'y_dev':y_1_dev})
-# savemat('y_train_32.mat', {'y_train':y_1_train})
+# save data
+savemat('features_dev.mat', {'features_1_dev': features_dev[0],
+                             'features_2_dev': features_dev[1],
+                             'features_3_dev': features_dev[2],
+                             'features_4_dev': features_dev[3],
+                             'features_5_dev': features_dev[4],
+                             'features_6_dev': features_dev[5],
+                             'features_7_dev': features_dev[6],
+                             'features_8_dev': features_dev[7],
+                             'features_9_dev': features_dev[8],
+                             'features_10_dev': features_dev[9],
+                             'features_11_dev': features_dev[10],
+                             'features_12_dev': features_dev[11]})
+savemat('features_train.mat', {'features_1_train': features_train[0],
+                               'features_2_train': features_train[1],
+                               'features_3_train': features_train[2],
+                               'features_4_train': features_train[3],
+                               'features_5_train': features_train[4],
+                               'features_6_train': features_train[5],
+                               'features_7_train': features_train[6],
+                               'features_8_train': features_train[7],
+                               'features_9_train': features_train[8],
+                               'features_10_train': features_train[9],
+                               'features_11_train': features_train[10],
+                               'features_12_train': features_train[11]})
+savemat('features_all.mat', {'features_1_all': features_all[0],
+                             'features_2_all': features_all[1],
+                             'features_3_all': features_all[2],
+                             'features_4_all': features_all[3],
+                             'features_5_all': features_all[4],
+                             'features_6_all': features_all[5],
+                             'features_7_all': features_all[6],
+                             'features_8_all': features_all[7],
+                             'features_9_all': features_all[8],
+                             'features_10_all': features_all[9],
+                             'features_11_all': features_all[10],
+                             'features_12_all': features_all[11]})
 
-# savemat('features_dev_norelu.mat', {'features_dev':features_dev_mat})
-# savemat('features_train_norelu.mat', {'features_train':features_train_mat})
-savemat('y_dev_final.mat', {'y_dev':y_1_dev})
-savemat('y_train_final.mat', {'y_train':y_1_train})
-savemat('y_all_final.mat', {'y_all':y_1_all})
-
+savemat('y_dev.mat', {'y_dev': y_dev_i})
+savemat('y_train.mat', {'y_train': y_train_i})
+savemat('y_all.mat', {'y_all': y_all_i})
