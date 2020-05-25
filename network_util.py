@@ -2,7 +2,7 @@ import os
 import numpy as np
 from keras.callbacks import Callback
 from keras import backend as K
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_curve, auc
 from evaluate_12ECG_score import compute_beta_score
 import tensorflow as tf
 
@@ -33,6 +33,12 @@ def calculate_F_G(pred_label, target, beta):
     FG_mean = (Fbeta_measure + Gbeta_measure) / 2
 
     return Fbeta_measure, Gbeta_measure, FG_mean
+
+
+def calculate_AUC(target, pred_score):
+    fpr, tpr, thresholds = roc_curve(target, pred_score)
+    result_auc = auc(fpr, tpr)
+    return result_auc
 
 
 class Metrics_multi_class(Callback):
@@ -186,3 +192,13 @@ def weighted_binary_crossentropy(yTrue, yPred):
                                [0.5165239597416253,  15.629545454545454]])
     class_CE = -(yTrue * K.log(yPred) * class_weight[:, 1] + (1-yTrue) * K.log(1-yPred) * class_weight[:, 0])
     return K.mean(class_CE)
+
+
+def weighted_binary_crossentropy_np(yTrue, yPred):
+    class_weight = np.asarray([[0.6079384724186705, 2.8161343161343164], [0.5586515028432169, 4.762465373961219],
+                               [0.5177684083722331, 14.569915254237289], [0.5770263467024669, 3.7456427015250546],
+                               [0.5491934195815366, 5.58198051948052], [0.5566618099401004, 4.912142857142857],
+                               [0.6849601593625498, 1.8516424340333872], [0.5723202396804261, 3.9568469505178365],
+                               [0.5165239597416253, 15.629545454545454]])
+    class_CE = -(yTrue * np.log(yPred) * class_weight[:, 1] + (1 - yTrue) * np.log(1 - yPred) * class_weight[:, 0])
+    return np.mean(class_CE)

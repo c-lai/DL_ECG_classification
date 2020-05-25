@@ -148,36 +148,27 @@ def build_network_LSTM(**params):
         BatchNormalization, ReLU, Bidirectional
     from keras.optimizers import Adam
 
-    inputs = Input(shape=[1, None])
+    inputs = Input(shape=[12, None])
 
-    rnn_layers = []
-    for i in range(1):
+    leads_reshape = []
+    for i in range(12):
         split = Lambda(lambda x: x[:, i, :])(inputs)
         reshape = Reshape((-1, params['step']))(split)
-        LSTMlayer1 = LSTM(32, return_sequences=True)(reshape)
-        BN_layer1 = BatchNormalization()(LSTMlayer1)
-        relu_layer1 = ReLU()(BN_layer1)
-        dropout_1 = Dropout(0.3)(relu_layer1)
-        LSTMlayer2 = LSTM(32, return_sequences=True)(dropout_1)
-        BN_layer2 = BatchNormalization()(LSTMlayer2)
-        relu_layer2 = ReLU()(BN_layer2)
-        dropout_2 = Dropout(0.3)(relu_layer2)
-        LSTMlayer3 = LSTM(32, return_sequences=True)(dropout_2)
-        BN_layer3 = BatchNormalization()(LSTMlayer3)
-        relu_layer3 = ReLU()(BN_layer3)
-        dropout_3 = Dropout(0.3)(relu_layer3)
-        LSTMlayer4 = LSTM(32)(dropout_3)
-        BN_layer4 = BatchNormalization()(LSTMlayer4)
-        # relu_layer3 = ReLU()(BN_layer3)
-        rnn_layers.append(BN_layer4)
+        leads_reshape.append(reshape)
+
+    input_reshape = concatenate(leads_reshape, axis=-1)
+    LSTMlayer1 = Bidirectional(LSTM(100, return_sequences=True))(input_reshape)
+    dropout_1 = Dropout(0.5)(LSTMlayer1)
+    LSTMlayer2 = Bidirectional(LSTM(100))(dropout_1)
+    dropout_2 = Dropout(0.5)(LSTMlayer2)
 
     # merge_layer = concatenate(rnn_layers)
-    output = Dense(1, activation='sigmoid')(BN_layer4)
+    output = Dense(9, activation='softmax')(dropout_2)
 
     model = Model(inputs=inputs, outputs=output)
     optimizer = Adam(lr=params["learning_rate"], clipnorm=params.get("clipnorm", 1))
 
-    model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+    model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
 
     print(model.summary())
 
@@ -203,7 +194,7 @@ def build_network_ResNet(**params):
     conv_2_1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(block_end_1)
     bn_2 = BatchNormalization()(conv_2_1)
     relu_2 = ReLU()(bn_2)
-    dropout_2 = Dropout(0.5)(relu_2)
+    dropout_2 = Dropout(0)(relu_2)
     conv_2_2 = Conv1D(filters=32, kernel_size=5, strides=2, padding='same')(dropout_2)
     max_pool_2 = MaxPooling1D(pool_size=2, strides=2, padding='same')(block_end_1)
     block_end_2 = Add()([conv_2_2, max_pool_2])
@@ -217,7 +208,7 @@ def build_network_ResNet(**params):
         conv_block_1 = Conv1D(filters=32, kernel_size=5, strides=1, padding='same')(relu_block_1)
         bn_block_2 = BatchNormalization()(conv_block_1)
         relu_block_2 = ReLU()(bn_block_2)
-        dropout_block = Dropout(0.5)(relu_block_2)
+        dropout_block = Dropout(0)(relu_block_2)
         conv_block_2 = Conv1D(filters=32, kernel_size=5, strides=2, padding='same')(dropout_block)
         max_pool_block = MaxPooling1D(pool_size=2, strides=2, padding='same')(block_end)
         block_end = Add()([conv_block_2, max_pool_block])

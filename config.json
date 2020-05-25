@@ -5,7 +5,7 @@
     "generator": true,
     "learning_rate": 0.001,
     "batch_size": 8,
-    "step": 512,
+    "step": 128,
     "block_num": 8,
     "lead": false
 }

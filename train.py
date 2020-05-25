@@ -19,7 +19,7 @@ import network_util
 
 # set random seed
 # for reproducible results, optimizer can't be Adam (can use RMSprop instead)
-seed_value = 5
+seed_value = 1
 os.environ['PYTHONHASHSEED'] = str(seed_value)
 np.random.seed(seed_value)
 tf.random.set_seed(seed_value)
@@ -68,7 +68,8 @@ def train(args, params):
 
     random.seed(seed_value)
 
-    model = network.build_network_ResNet(**params)
+    # model = network.build_network_ResNet(**params)
+    model = network.build_network_LSTM(**params)
 
     stopping = keras.callbacks.EarlyStopping(patience=15)
 
