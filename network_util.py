@@ -19,9 +19,9 @@ def find_best_threshold(target, pred_score, beta):
     Fbeta_measure = (1 + beta ** 2) * tp / ((1 + beta ** 2) * tp + fp + beta ** 2 * fn)
     Gbeta_measure = tp / (tp + fp + beta * fn)
     FG_mean = (Fbeta_measure + Gbeta_measure) / 2
-    best_threshold = threshold[np.argmax(FG_mean)]
+    best_threshold = threshold[np.argmax(Fbeta_measure)]
 
-    return FG_mean, best_threshold
+    return best_threshold
 
 
 def calculate_F_G(pred_label, target, beta):
@@ -42,14 +42,19 @@ def calculate_AUC(target, pred_score):
 
 
 class Metrics_multi_class(Callback):
-    def __init__(self, train_data, val_data, save_dir):
+    def __init__(self, train_gen, train_step, val_gen, val_step, test_gen, test_step, batch_size, save_dir):
         super().__init__()
-        self.train_data = train_data
-        self.validation_data = val_data
+        self.train_gen = train_gen
+        self.train_step = train_step
+        self.val_gen = val_gen
+        self.val_step = val_step
+        self.test_gen = test_gen
+        self.test_step = test_step
         self.save_dir = save_dir
+        self.batch_size = batch_size
 
         self.num_classes = 9
-        self.beta = 2
+        self.beta = 1
 
     def on_train_begin(self, logs={}):
         self.val_accuracy = []
@@ -59,72 +64,113 @@ class Metrics_multi_class(Callback):
         self.FG_mean = []
 
     def on_epoch_end(self, epoch, logs={}):
+        # train_pred_score = np.asarray(self.model.predict(self.train_gen, steps=self.train_step))
+        # train_targ = np.empty((self.train_gen*self.batch_size, 9), dtype=np.int64)
+        # for n in range(self.train_step):
+        #     train_targ[n, :] = next(self.train_gen)[1]
         val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
         val_targ = self.validation_data[1]
-        train_pred_score = np.asarray(self.model.predict(self.train_data[0]))
+        train_pred_score = np.asarray(self.model.predict(self.train_gen, steps=self.train_step))
         train_targ = self.train_data[1]
+        test_pred_score = np.asarray(self.model.predict(self.test_data[0]))
+        test_targ = self.test_data[1]
 
-        FG_mean_train = []
-        FG_mean_val = []
+        F_train = []
+        F_val = []
+        F_test = []
         best_threshold = []
 
+        train_pred_label = np.zeros((train_pred_score.shape[0], self.num_classes), dtype=int)
         val_pred_label = np.zeros((val_pred_score.shape[0], self.num_classes), dtype=int)
+        test_pred_label = np.zeros((test_pred_score.shape[0], self.num_classes), dtype=int)
         for c in range(9):
             print(f'class {c:.0f}:', end=' ')
 
             # use 0.5 as threshold
             best_threshold_c = 0.5
 
-            # # find the best threshold on training set
-            # train_targ_c = train_targ[:, c].reshape((-1, 1))
-            # train_pred_score_c = train_pred_score[:, c].reshape((-1, 1))
-            #
-            # FG_mean_train_c, best_threshold_c = find_best_threshold(train_targ_c, train_pred_score_c, self.beta)
+            # find the best threshold on training set
+            train_targ_c = train_targ[:, c].reshape((-1, 1))
+            train_pred_score_c = train_pred_score[:, c].reshape((-1, 1))
+            # best_threshold_c = find_best_threshold(train_targ_c, train_pred_score_c, self.beta)
             # FG_mean_train.append(np.max(FG_mean_train_c))
 
             best_threshold.append(best_threshold_c)
 
+            # use the threshold to label subjects on training
+            train_pred_label_c = np.ceil(train_pred_score_c - best_threshold_c)
+            train_pred_label[:, c] = train_pred_label_c.reshape(-1)
             # use the threshold to label subjects on validation
             val_targ_c = val_targ[:, c].reshape((-1, 1))
             val_pred_score_c = val_pred_score[:, c].reshape((-1, 1))
             val_pred_label_c = np.ceil(val_pred_score_c - best_threshold_c)
             val_pred_label[:, c] = val_pred_label_c.reshape(-1)
+            # use the threshold to label subjects on test
+            test_targ_c = test_targ[:, c].reshape((-1, 1))
+            test_pred_score_c = test_pred_score[:, c].reshape((-1, 1))
+            test_pred_label_c = np.ceil(test_pred_score_c - best_threshold_c)
+            test_pred_label[:, c] = test_pred_label_c.reshape(-1)
 
             # calculate measurements on validation
-            Fbeta_measure_val_c, Gbeta_measure_val_c, FG_mean_val_c = calculate_F_G(val_pred_label_c, val_targ_c, self.beta)
-            FG_mean_val.append(FG_mean_val_c)
-            print(f'{FG_mean_val_c:.3f}(t:{best_threshold_c:.2f}),', end=' ')
+            Fbeta_measure_train_c, Gbeta_measure_train_c, FG_mean_train_c = \
+                calculate_F_G(train_pred_label_c, train_targ_c, self.beta)
+            F_train.append(Fbeta_measure_train_c)
+            Fbeta_measure_val_c, Gbeta_measure_val_c, FG_mean_val_c = \
+                calculate_F_G(val_pred_label_c, val_targ_c, self.beta)
+            F_val.append(Fbeta_measure_val_c)
+            Fbeta_measure_test_c, Gbeta_measure_test_c, FG_mean_test_c = \
+                calculate_F_G(test_pred_label_c, test_targ_c, self.beta)
+            F_test.append(Fbeta_measure_test_c)
+
+            print(f'{Fbeta_measure_val_c:.3f}(t:{best_threshold_c:.2f}),', end=' ')
 
         # calculate measurements for all classes
-        accuracy, f_measure, Fbeta_measure, Gbeta_measure = compute_beta_score(val_targ, val_pred_label, self.beta,
-                                                                               self.num_classes)
-        FG_mean = np.mean([Fbeta_measure, Gbeta_measure])
-        self.val_accuracy.append(accuracy)
-        self.val_f_measure.append(f_measure)
-        self.val_Fbeta_measure.append(Fbeta_measure)
-        self.val_Gbeta_measure.append(Gbeta_measure)
-        self.FG_mean.append(FG_mean)
+        accuracy_train, f_measure_train, Fbeta_measure_train, Gbeta_measure_train \
+            = compute_beta_score(train_targ, train_pred_label, self.beta, self.num_classes)
+        print("\n- train_f_measure:% f - train_Fbeta_measure:% f - train_Gbeta_measure:% f"
+              % (f_measure_train, Fbeta_measure_train, Gbeta_measure_train))
 
-        print("\n- val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
-              % (f_measure, Fbeta_measure, Gbeta_measure, FG_mean))
+        accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val \
+            = compute_beta_score(val_targ, val_pred_label, self.beta, self.num_classes)
+        print("- val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f"
+              % (f_measure_val, Fbeta_measure_val, Gbeta_measure_val))
 
-        with open(os.path.join(self.save_dir, f"log-epoch{epoch+1:03d}-FG_mean{FG_mean:.3f}.txt"), 'a', encoding='utf-8') as f:
-            f.write("val_accuracy:% f \nval_f_measure:% f \nval_Fbeta_measure:% f \nval_Gbeta_measure:% f \nGeometric Mean:% f \n"
-              % (accuracy, f_measure, Fbeta_measure, Gbeta_measure, FG_mean))
+        accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test \
+            = compute_beta_score(test_targ, test_pred_label, self.beta, self.num_classes)
+        print("- test_f_measure:% f - test_Fbeta_measure:% f - test_Gbeta_measure:% f"
+              % (f_measure_test, Fbeta_measure_test, Gbeta_measure_test))
+
+        self.val_accuracy.append(accuracy_val)
+        self.val_f_measure.append(f_measure_val)
+        self.val_Fbeta_measure.append(Fbeta_measure_val)
+        self.val_Gbeta_measure.append(Gbeta_measure_val)
+
+        with open(os.path.join(self.save_dir, f"log-epoch{epoch+1:03d}-F1{f_measure_val:.3f}.txt"), 'a', encoding='utf-8') as f:
+            f.write(
+                "train_accuracy:% f \ntrain_f_measure:% f \ntrain_Fbeta_measure:% f \ntrain_Gbeta_measure:% f \n"
+                % (accuracy_train, f_measure_train, Fbeta_measure_train, Gbeta_measure_train))
+            f.write(
+                "val_accuracy:% f \nval_f_measure:% f \nval_Fbeta_measure:% f \nval_Gbeta_measure:% f \n"
+                % (accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val))
+            f.write(
+                "test_accuracy:% f \ntest_f_measure:% f \ntest_Fbeta_measure:% f \ntest_Gbeta_measure:% f \n"
+                % (accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test))
             for i in range(9):
-                f.write(f'class {i:.0f}: FG_mean_val {FG_mean_val[i]:.3f}, threshold {best_threshold[i]:.3f} \n')
+                f.write(f'class {i+1:.0f}, threshold {best_threshold[i]:.3f} :\n'
+                        f'F_train {F_train[i]:.3f},  F_val {F_val[i]:.3f}, F_test {F_test[i]:.3f},\n')
 
         return
 
 
 class Metrics_single_class(Callback):
-    def __init__(self, train_data, val_data, save_dir):
+    def __init__(self, train_data, val_data, test_data, save_dir):
         super().__init__()
         self.train_data = train_data
         self.validation_data = val_data
+        self.test_data = test_data
         self.save_dir = save_dir
 
-        self.beta = 2
+        self.beta = 1
 
     def on_train_begin(self, logs={}):
         self.val_accuracy = []
@@ -141,14 +187,22 @@ class Metrics_single_class(Callback):
         # best_threshold = 0.5
 
         # find the best threshold on training set
-        FG_mean_train, best_threshold = find_best_threshold(train_targ, train_pred_score, self.beta)
+        best_threshold = find_best_threshold(train_targ, train_pred_score, self.beta)
 
-        print(f"- beat threshold on train:{best_threshold:.3f} - best FG_mean on train: {np.max(FG_mean_train):.3f}")
+        print(f"- beat threshold on train:{best_threshold:.3f}")
 
+        # use the threshold to label subjects on training
+        train_pred_score = np.asarray(self.model.predict(self.train_data[0]))
+        train_targ = self.train_data[1].reshape((-1, 1))
+        train_pred_label = np.ceil(train_pred_score - best_threshold)
         # use the threshold to label subjects on validation
         val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
         val_targ = self.validation_data[1].reshape((-1, 1))
         val_pred_label = np.ceil(val_pred_score - best_threshold)
+        # use the threshold to label subjects on test
+        test_pred_score = np.asarray(self.model.predict(self.test_data[0]))
+        test_targ = self.test_data[1].reshape((-1, 1))
+        test_pred_label = np.ceil(test_pred_score - best_threshold)
 
         # calculate measurements on validation
         Fbeta_measure_val, Gbeta_measure_val, FG_mean_val = calculate_F_G(val_pred_label, val_targ, self.beta)

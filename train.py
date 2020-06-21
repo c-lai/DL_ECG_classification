@@ -19,7 +19,7 @@ import network_util
 
 # set random seed
 # for reproducible results, optimizer can't be Adam (can use RMSprop instead)
-seed_value = 1
+seed_value = 6
 os.environ['PYTHONHASHSEED'] = str(seed_value)
 np.random.seed(seed_value)
 tf.random.set_seed(seed_value)
@@ -57,10 +57,13 @@ def train(args, params):
     train = load.load_dataset(params['train'], params['lead'])
     print("Loading dev set...")
     dev = load.load_dataset(params['dev'], params['lead'])
+    print("Loading test set...")
+    test = load.load_dataset(params['test'], params['lead'])
     print("Building preprocessor...")
     preproc = load.Preproc(*train)
     print("Training size: " + str(len(train[0])) + " examples.")
     print("Dev size: " + str(len(dev[0])) + " examples.")
+    print("Test size: " + str(len(test[0])) + " examples.")
 
     save_dir = make_save_dir(params['save_dir'], args.experiment)
 
@@ -68,8 +71,8 @@ def train(args, params):
 
     random.seed(seed_value)
 
-    # model = network.build_network_ResNet(**params)
-    model = network.build_network_LSTM(**params)
+    model = network.build_network_ResNet(**params)
+    # model = network.build_network_LSTM(**params)
 
     stopping = keras.callbacks.EarlyStopping(patience=15)
 
@@ -87,11 +90,17 @@ def train(args, params):
     batch_size = params.get("batch_size", 4)
 
     metrics = network_util.Metrics_multi_class(preproc.process(train[0], train[1]), preproc.process(dev[0], dev[1]),
-                                               save_dir=save_dir)
+                                               preproc.process(test[0], test[1]), save_dir=save_dir)
 
     if params.get("generator", False):
         train_gen = load.data_generator(batch_size, preproc, *train)
         dev_gen = load.data_generator(batch_size, preproc, *dev)
+        test_gen = load.data_generator(batch_size, preproc, *test)
+        metrics = network_util.Metrics_multi_class(load.data_generator_no_shuffle(1, preproc, *train), len(train[0]),
+                                                   load.data_generator_no_shuffle(1, preproc, *dev), len(dev[0]),
+                                                   load.data_generator_no_shuffle(1, preproc, *test), len(test[0]),
+                                                   batch_size=1,
+                                                   save_dir=save_dir)
         model.fit_generator(
             train_gen,
             steps_per_epoch=int(len(train[0]) / batch_size),
