@@ -19,7 +19,7 @@ import network_util
 
 # set random seed
 # for reproducible results, optimizer can't be Adam (can use RMSprop instead)
-seed_value = 6
+seed_value = 3
 os.environ['PYTHONHASHSEED'] = str(seed_value)
 np.random.seed(seed_value)
 tf.random.set_seed(seed_value)
@@ -89,17 +89,16 @@ def train(args, params):
 
     batch_size = params.get("batch_size", 4)
 
-    metrics = network_util.Metrics_multi_class(preproc.process(train[0], train[1]), preproc.process(dev[0], dev[1]),
-                                               preproc.process(test[0], test[1]), save_dir=save_dir)
-
     if params.get("generator", False):
         train_gen = load.data_generator(batch_size, preproc, *train)
         dev_gen = load.data_generator(batch_size, preproc, *dev)
-        test_gen = load.data_generator(batch_size, preproc, *test)
-        metrics = network_util.Metrics_multi_class(load.data_generator_no_shuffle(1, preproc, *train), len(train[0]),
-                                                   load.data_generator_no_shuffle(1, preproc, *dev), len(dev[0]),
-                                                   load.data_generator_no_shuffle(1, preproc, *test), len(test[0]),
-                                                   batch_size=1,
+        metrics = network_util.Metrics_multi_class(load.data_generator_no_shuffle(batch_size, preproc, *train),
+                                                   int(len(train[0]) / batch_size),
+                                                   load.data_generator_no_shuffle(batch_size, preproc, *dev),
+                                                   int(len(dev[0]) / batch_size),
+                                                   load.data_generator_no_shuffle(batch_size, preproc, *test),
+                                                   int(len(test[0]) / batch_size),
+                                                   batch_size=batch_size,
                                                    save_dir=save_dir)
         model.fit_generator(
             train_gen,

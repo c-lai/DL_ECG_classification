@@ -50,8 +50,8 @@ class Metrics_multi_class(Callback):
         self.val_step = val_step
         self.test_gen = test_gen
         self.test_step = test_step
-        self.save_dir = save_dir
         self.batch_size = batch_size
+        self.save_dir = save_dir
 
         self.num_classes = 9
         self.beta = 1
@@ -61,19 +61,21 @@ class Metrics_multi_class(Callback):
         self.val_f_measure = []
         self.val_Fbeta_measure = []
         self.val_Gbeta_measure = []
-        self.FG_mean = []
 
     def on_epoch_end(self, epoch, logs={}):
-        # train_pred_score = np.asarray(self.model.predict(self.train_gen, steps=self.train_step))
-        # train_targ = np.empty((self.train_gen*self.batch_size, 9), dtype=np.int64)
-        # for n in range(self.train_step):
-        #     train_targ[n, :] = next(self.train_gen)[1]
-        val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
-        val_targ = self.validation_data[1]
+        train_targ = np.empty((self.train_step * self.batch_size, 9), dtype=np.int64)
+        for n in range(self.train_step):
+            train_targ[n * self.batch_size:(n + 1) * self.batch_size, :] = next(self.train_gen)[1]
+        val_targ = np.empty((self.val_step * self.batch_size, 9), dtype=np.int64)
+        for n in range(self.val_step):
+            val_targ[n * self.batch_size:(n + 1) * self.batch_size, :] = next(self.val_gen)[1]
+        test_targ = np.empty((self.test_step * self.batch_size, 9), dtype=np.int64)
+        for n in range(self.test_step):
+            test_targ[n * self.batch_size:(n + 1) * self.batch_size, :] = next(self.test_gen)[1]
+
         train_pred_score = np.asarray(self.model.predict(self.train_gen, steps=self.train_step))
-        train_targ = self.train_data[1]
-        test_pred_score = np.asarray(self.model.predict(self.test_data[0]))
-        test_targ = self.test_data[1]
+        val_pred_score = np.asarray(self.model.predict(self.val_gen, steps=self.val_step))
+        test_pred_score = np.asarray(self.model.predict(self.test_gen, steps=self.test_step))
 
         F_train = []
         F_val = []
@@ -93,7 +95,6 @@ class Metrics_multi_class(Callback):
             train_targ_c = train_targ[:, c].reshape((-1, 1))
             train_pred_score_c = train_pred_score[:, c].reshape((-1, 1))
             # best_threshold_c = find_best_threshold(train_targ_c, train_pred_score_c, self.beta)
-            # FG_mean_train.append(np.max(FG_mean_train_c))
 
             best_threshold.append(best_threshold_c)
 

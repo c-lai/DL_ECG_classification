@@ -8,7 +8,6 @@ import random
 import scipy.io as sio
 import tqdm
 import linecache
-import csv
 
 STEP = 512
 
@@ -159,8 +158,6 @@ def load_ecg(record):
 if __name__ == "__main__":
     data_directory = "Training_WFDB/all"
     train = load_dataset(data_directory, False)
-    test_directory = "Training_WFDB/test_set"
-    test = load_testset(test_directory)
     preproc = Preproc(*train)
     gen = data_generator(8, preproc, *train)
     for x, y in gen:
