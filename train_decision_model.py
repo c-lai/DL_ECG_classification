@@ -6,9 +6,10 @@ from keras.layers import Dense, LeakyReLU, ReLU, BatchNormalization
 from scipy.io import loadmat
 from evaluate_12ECG_score import compute_beta_score
 from keras.optimizers import Adam
+import load
 from train import get_filename_for_saving, make_save_dir
 from network_util import Metrics_multi_class
-from network_util import weighted_mse, weighted_cross_entropy, weighted_binary_crossentropy, weighted_binary_crossentropy_np
+from network_util import weighted_mse, weighted_binary_crossentropy
 from network_util import find_best_threshold, calculate_F_G, calculate_AUC
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 import matplotlib.pyplot as plt
@@ -25,12 +26,13 @@ def scheduler(epoch):
 
 
 def train_NN_model(f_train, y_train, f_dev, y_dev, f_test, y_test):
+    num_leads = int(f_train.shape[1] / 32)
     beta = 1
-
     print("Training neural network model")
+
     # set model
     model = Sequential()
-    model.add(Dense(64, input_dim=32 * 12))
+    model.add(Dense(64, input_dim=32*num_leads))
     model.add(BatchNormalization())
     model.add(ReLU())
     model.add(Dense(32))
@@ -39,12 +41,10 @@ def train_NN_model(f_train, y_train, f_dev, y_dev, f_test, y_test):
     model.add(Dense(9, activation='sigmoid'))
 
     lr = 0.001
-    # model.compile(loss="categorical_crossentropy", optimizer=Adam(lr=lr), metrics=['accuracy'])
     model.compile(loss=weighted_binary_crossentropy, optimizer=Adam(lr=lr), metrics=['categorical_accuracy'])
-    # model.compile(loss="binary_crossentropy", optimizer="adam", metrics=['accuracy'])
 
     save_dir = "save"
-    model_save_dir = make_save_dir(save_dir, "decision_model_final")
+    model_save_dir = make_save_dir(save_dir, "decision_model")
 
     stopping = keras.callbacks.EarlyStopping(patience=8)
 
@@ -60,35 +60,50 @@ def train_NN_model(f_train, y_train, f_dev, y_dev, f_test, y_test):
         filepath=get_filename_for_saving(model_save_dir),
         save_best_only=False)
 
-    metrics = Metrics_multi_class(train_data=(f_train, y_train), val_data=(f_dev, y_dev), save_dir=model_save_dir)
+    metrics = Metrics_multi_class(train_data=(f_train, y_train),
+                                  val_data=(f_dev, y_dev),
+                                  test_data=(f_test, y_test),
+                                  save_dir=model_save_dir)
 
     model.fit(f_train, y_train, epochs=30, batch_size=10, validation_data=(f_dev, y_dev),
               callbacks=[checkpointer, metrics, reduce_lr, stopping])
 
+    # model evaluation
     y_train_pred_score = model.predict(f_train)
     y_train_pred_class = np.ceil(y_train_pred_score - 0.5)
     accuracy_train, f_measure_train, Fbeta_measure_train, Gbeta_measure_train = \
         compute_beta_score(y_train, y_train_pred_class, beta, 9)
+    AUC_train = np.zeros((9, 1))
+    for c in range(9):
+        AUC_train[c, 0] = calculate_AUC(y_train[:, c], y_train_pred_score[:, c])
+    print(
+        "- train_accuracy:% f - train_F1:% f - train_Fbeta_measure:% f - train_Gbeta_measure:% f - train_AUC:% f"
+        % (accuracy_train, f_measure_train, Fbeta_measure_train, Gbeta_measure_train, np.mean(AUC_train)))
 
     y_val_pred_score = model.predict(f_dev)
     y_val_pred_class = np.ceil(y_val_pred_score - 0.5)
     accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val = \
         compute_beta_score(y_dev, y_val_pred_class, beta, 9)
+    AUC_val = np.zeros((9, 1))
+    for c in range(9):
+        AUC_val[c, 0] = calculate_AUC(y_dev[:, c], y_val_pred_score[:, c])
+    print(
+        "- val_accuracy:% f - val_F1:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - val_AUC:% f"
+        % (accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val, np.mean(AUC_val)))
 
     y_test_pred_score = model.predict(f_test)
     y_test_pred_class = np.ceil(y_test_pred_score - 0.5)
     accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test = \
         compute_beta_score(y_test, y_test_pred_class, beta, 9)
-    FG_mean_test = np.mean([Fbeta_measure_test, Gbeta_measure_test])
-    # print(
-    #     "test_accuracy:% f - test_f_measure:% f - test_Fbeta_measure:% f - test_Gbeta_measure:% f - Geometric Mean:% f"
-    #     % (accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test, FG_mean_test))
-    # Fbeta_measure_test, Gbeta_measure_test, FG_mean_test = calculate_F_G(y_test_pred_class, y_test, beta)
     AUC_test = np.zeros((9, 1))
     for c in range(9):
         AUC_test[c, 0] = calculate_AUC(y_test[:, c], y_test_pred_score[:, c])
+    print(
+        "- test_accuracy:% f - test_F1:% f - test_Fbeta_measure:% f - test_Gbeta_measure:% f - test_AUC:% f"
+        % (accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test, np.mean(AUC_test)))
 
-    savemat('NN_results.mat',
+    # save predictions
+    savemat('.\\result\\decision_result_NN.mat',
             {'pred_label_train': y_train_pred_class,
              'pred_score_train': y_train_pred_score,
              'true_label_train': y_train,
@@ -98,17 +113,15 @@ def train_NN_model(f_train, y_train, f_dev, y_dev, f_test, y_test):
              'pred_label_test': y_test_pred_class,
              'pred_score_test': y_test_pred_score,
              'true_label_test': y_test})
-    print("- test_accuracy:% f - test_F1:% f - test_Fbeta_measure:% f - test_Gbeta_measure:% f - Geometric Mean:% f - test_AUC:% f"
-          % (accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test, FG_mean_test, np.mean(AUC_test)))
 
     return model
 
 
 def train_tree_model(f_train, y_train, f_dev, y_dev, f_test, y_test):
     num_leads = int(f_train.shape[1]/32)
+    beta = 1
     print("Training tree models")
 
-    beta = 1
     models = []
     pred_label_train_list = []
     pred_score_train_list = []
@@ -120,12 +133,14 @@ def train_tree_model(f_train, y_train, f_dev, y_dev, f_test, y_test):
     important_leads = np.zeros((1, 9))
     for i in range(9):
         print("processing class %d/9..." % (i + 1))
+        # train tree model
         clf = RandomForestClassifier(n_estimators=1000, max_depth=4,
                                      bootstrap=True, random_state=4).fit(f_train, y_train[:, i])
         # clf = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1,
         #                                  max_depth=3, random_state=0).fit(f_train, y_train[:, i])
         models.append(clf)
 
+        # get lead importance
         importance = clf.feature_importances_
         lead_importance_c = np.sum(importance.reshape((num_leads, -1)), axis=1)
         lead_importance_list.append(lead_importance_c)
@@ -163,32 +178,34 @@ def train_tree_model(f_train, y_train, f_dev, y_dev, f_test, y_test):
         # calculate measurements on test
         Fbeta_measure_test, Gbeta_measure_test, FG_mean_test = calculate_F_G(pred_labels_i_test, targ_labels_i_test, beta)
 
-        print("- val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
-              % (Fbeta_measure_val, Gbeta_measure_val, FG_mean_val))
-        print("- test_Fbeta_measure:% f - test_Gbeta_measure:% f - Geometric Mean:% f"
-              % (Fbeta_measure_test, Gbeta_measure_test, FG_mean_test))
+        print("- val_Fbeta_measure:% f - val_Gbeta_measure:% f"
+              % (Fbeta_measure_val, Gbeta_measure_val))
+        print("- test_Fbeta_measure:% f - test_Gbeta_measure:% f"
+              % (Fbeta_measure_test, Gbeta_measure_test))
 
+    lead_importance = np.concatenate(lead_importance_list, axis=0).reshape(9, num_leads)
+    # calculate overall measurements
     pred_label_train = np.concatenate(pred_label_train_list, axis=1)
     pred_score_train = np.concatenate(pred_score_train_list, axis=1)
 
-    # calculate overall measurements
     pred_label_val = np.concatenate(pred_label_val_list, axis=1)
     pred_score_val = np.concatenate(pred_score_val_list, axis=1)
     accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val = \
         compute_beta_score(y_dev, pred_label_val, beta, 9)
-    FG_mean_val = np.mean([Fbeta_measure_val, Gbeta_measure_val])
     print(
-        "All: - val_accuracy:% f - val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
-        % (accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val, FG_mean_val))
+        "All: - val_accuracy:% f - val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f"
+        % (accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val))
 
     pred_label_test = np.concatenate(pred_label_test_list, axis=1)
     pred_score_test = np.concatenate(pred_score_test_list, axis=1)
     accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test = \
         compute_beta_score(y_test, pred_label_test, beta, 9)
-    FG_mean_test = np.mean([Fbeta_measure_test, Gbeta_measure_test])
+    print(
+        "All: - test_accuracy:% f - test_f_measure:% f - test_Fbeta_measure:% f - test_Gbeta_measure:% f"
+        % (accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test))
 
-    lead_importance = np.concatenate(lead_importance_list, axis=0).reshape(9, num_leads)
-    savemat('tree_results_1000_subset_4.mat',
+    # save predictions
+    savemat('.\\result\\decision_result_tree.mat',
             {'pred_label_train': pred_label_train,
              'pred_score_train': pred_score_train,
              'true_label_train': y_train,
@@ -199,9 +216,6 @@ def train_tree_model(f_train, y_train, f_dev, y_dev, f_test, y_test):
              'pred_score_test': pred_score_test,
              'true_label_test': y_test,
              'lead_importance': lead_importance})
-    print(
-        "All: - test_accuracy:% f - test_f_measure:% f - test_Fbeta_measure:% f - test_Gbeta_measure:% f - Geometric Mean:% f"
-        % (accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test, FG_mean_test))
 
     return models
 
@@ -431,13 +445,12 @@ def backward_subset_selection_NN(f_train, y_train, f_dev, y_dev, f_test, y_test)
               f"-test_F1:{F1_all_test[-1]:.3f}-test_F2:{F2_all_test[-1]:.3f}-test_G:{G_all_test[-1]:.3f}"
               f"-test_FG_mean:{FG_mean_test_lead[select_index]:.3f}-test_AUC:{AUC_all_test[-1]:.3f}")
 
-    savemat('backward_subset_selection_5mean_Nodropout_relu_F1_2.mat',
+    savemat('.\\result\\subset_selection\\backward_subset_selection_5mean_Nodropout_relu_F1_2.mat',
             {'leads_selected': np.array(leads_selection),
              'WCE_val': np.array(WCE_all),
              'FG_mean_all_train': np.array(FG_mean_all_train),
              'F1_train': np.array(F1_all_train),
              'F1_var_train': np.array(F1_var_train),
-             # 'F2_train': np.array(F2_all_train),
              'G_train': np.array(G_all_train),
              'G_var_train': np.array(G_var_train),
              'AUC_train': np.array(AUC_all_train),
@@ -445,7 +458,6 @@ def backward_subset_selection_NN(f_train, y_train, f_dev, y_dev, f_test, y_test)
              'FG_mean_all_val': np.array(FG_mean_all_val),
              'F1_val': np.array(F1_all_val),
              'F1_var_val': np.array(F1_var_val),
-             # 'F2_val': np.array(F2_all_val),
              'G_val': np.array(G_all_val),
              'G_var_val': np.array(G_var_val),
              'AUC_val': np.array(AUC_all_val),
@@ -453,7 +465,6 @@ def backward_subset_selection_NN(f_train, y_train, f_dev, y_dev, f_test, y_test)
              'FG_mean_all_test': np.array(FG_mean_all_test),
              'F1_test': np.array(F1_all_test),
              'F1_var_test': np.array(F1_var_test),
-             # 'F2_test': np.array(F2_all_test),
              'G_test': np.array(G_all_test),
              'G_var_test': np.array(G_var_test),
              'AUC_test': np.array(AUC_all_test),
@@ -468,6 +479,8 @@ def backward_subset_selection_NN(f_train, y_train, f_dev, y_dev, f_test, y_test)
     plt.plot(F2_all_test, label='F_test')
     plt.plot(G_all_test, label='G_test')
     plt.show()
+
+    return
 
 
 def forward_subset_selection_NN(f_train, y_train, f_dev, y_dev, f_test, y_test):
@@ -653,7 +666,7 @@ def forward_subset_selection_NN(f_train, y_train, f_dev, y_dev, f_test, y_test):
               f"- test_F1:{np.mean(F1_all_test[-1]):.3f} - test_F2:{np.mean(F2_all_test[-1]):.3f}"
               f"- test_G:{np.mean(G_all_test[-1]):.3f} - test_AUC:{np.mean(AUC_all_test[-1]):.3f}")
 
-    savemat('forward_subset_selection_5mean_Nodropout_relu_F1_6.mat',
+    savemat('.\\result\\subset_selection\\forward_subset_selection_5mean_Nodropout_relu_F1_6.mat',
             {'leads_selected': np.array(leads_selection),
              'WCE_val': np.array(WCE_all),
              't_value': np.array(t_value),
@@ -667,6 +680,8 @@ def forward_subset_selection_NN(f_train, y_train, f_dev, y_dev, f_test, y_test):
              'F1_test': np.array(F1_all_test),
              'G_test': np.array(G_all_test),
              'AUC_test': np.array(AUC_all_test)})
+
+    return
 
 
 def forward_subset_selection_tree(f_train, y_train, f_dev, y_dev, f_test, y_test):
@@ -843,7 +858,7 @@ def forward_subset_selection_tree(f_train, y_train, f_dev, y_dev, f_test, y_test
               f"- test_F1:{np.mean(F1_all_test[-1]):.3f} - test_F2:{np.mean(F2_all_test[-1]):.3f}"
               f"- test_G:{np.mean(G_all_test[-1]):.3f} - test_AUC:{np.mean(AUC_all_test[-1]):.3f}")
 
-    savemat('forward_subset_selection_tree_5mean_dropout_F1.mat',
+    savemat('.\\result\\subset_selection\\forward_subset_selection_tree_5mean_dropout_F1.mat',
             {'leads_selected': np.array(leads_selection),
              't_value': np.array(t_value),
              'p_value': np.array(p_value),
@@ -857,43 +872,36 @@ def forward_subset_selection_tree(f_train, y_train, f_dev, y_dev, f_test, y_test
              'G_test': np.array(G_all_test),
              'AUC_test': np.array(AUC_all_test)})
 
-
-def compute_t_value(x_1, x_2):
-    var_estimate_1 = np.sum(abs(x_1 - x_1.mean()) ** 2) / (np.shape(x_1)[0] - 1)
-    var_estimate_2 = np.sum(abs(x_2 - x_2.mean()) ** 2) / (np.shape(x_2)[0] - 1)
-    pooled_std = np.sqrt((var_estimate_1+var_estimate_2)/2)
-    t = (np.mean(x_1) - np.mean(x_2))/(pooled_std*np.sqrt(2/np.shape(x_1)[0]))
-
-    return t
+    return
 
 
 # load data
-f = loadmat('features_train_final.mat')
-# f_train = np.concatenate((f['features_1_train'], f['features_2_train'], f['features_3_train'],
-#                           f['features_4_train'], f['features_5_train'], f['features_6_train'],
-#                           f['features_7_train'], f['features_8_train'], f['features_9_train'],
-#                           f['features_10_train'], f['features_11_train'], f['features_12_train']), axis=1)
-f_train = np.concatenate((f['features_2_train'], f['features_4_train'], f['features_7_train'],
-                          f['features_10_train']), axis=1)
-y_train = loadmat('y_train_final.mat')['y_train']
+f = loadmat('.\\featrues\\features_train_final.mat')
+f_train = np.concatenate((f['features_1_train'], f['features_2_train'], f['features_3_train'],
+                          f['features_4_train'], f['features_5_train'], f['features_6_train'],
+                          f['features_7_train'], f['features_8_train'], f['features_9_train'],
+                          f['features_10_train'], f['features_11_train'], f['features_12_train']), axis=1)
+# f_train = np.concatenate((f['features_2_train'], f['features_4_train'], f['features_7_train'],
+#                           f['features_10_train']), axis=1)
+y_train = loadmat('.\\featrues\\y_train_final.mat')['y_train']
 
-f = loadmat('features_dev_final.mat')
-# f_dev = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_3_dev'],
-#                         f['features_4_dev'], f['features_5_dev'], f['features_6_dev'],
-#                         f['features_7_dev'], f['features_8_dev'], f['features_9_dev'],
-#                         f['features_10_dev'], f['features_11_dev'], f['features_12_dev']), axis=1)
-f_dev = np.concatenate((f['features_2_dev'], f['features_4_dev'], f['features_7_dev'],
-                        f['features_10_dev']), axis=1)
-y_dev = loadmat('y_dev_final.mat')['y_dev']
+f = loadmat('.\\featrues\\features_dev_final.mat')
+f_dev = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_3_dev'],
+                        f['features_4_dev'], f['features_5_dev'], f['features_6_dev'],
+                        f['features_7_dev'], f['features_8_dev'], f['features_9_dev'],
+                        f['features_10_dev'], f['features_11_dev'], f['features_12_dev']), axis=1)
+# f_dev = np.concatenate((f['features_2_dev'], f['features_4_dev'], f['features_7_dev'],
+#                         f['features_10_dev']), axis=1)
+y_dev = loadmat('.\\featrues\\y_dev_final.mat')['y_dev']
 
-f = loadmat('features_test_final.mat')
-# f_test = np.concatenate((f['features_1_test'], f['features_2_test'], f['features_3_test'],
-#                          f['features_4_test'], f['features_5_test'], f['features_6_test'],
-#                          f['features_7_test'], f['features_8_test'], f['features_9_test'],
-#                          f['features_10_test'], f['features_11_test'], f['features_12_test']), axis=1)
-f_test = np.concatenate((f['features_2_test'], f['features_4_test'], f['features_7_test'],
-                         f['features_10_test']), axis=1)
-y_test = loadmat('y_test_final.mat')['y_test']
+f = loadmat('.\\featrues\\features_test_final.mat')
+f_test = np.concatenate((f['features_1_test'], f['features_2_test'], f['features_3_test'],
+                         f['features_4_test'], f['features_5_test'], f['features_6_test'],
+                         f['features_7_test'], f['features_8_test'], f['features_9_test'],
+                         f['features_10_test'], f['features_11_test'], f['features_12_test']), axis=1)
+# f_test = np.concatenate((f['features_2_test'], f['features_4_test'], f['features_7_test'],
+#                          f['features_10_test']), axis=1)
+y_test = loadmat('.\\featrues\\y_test_final.mat')['y_test']
 
 # NN_model = train_NN_model(f_train, y_train, f_dev, y_dev, f_test, y_test)
 tree_models = train_tree_model(f_train, y_train, f_dev, y_dev, f_test, y_test)

@@ -55,7 +55,7 @@ G_test = Gbeta_measure_test
 
 
 # save data
-savemat('result_LSTM.mat', {'F1_train': F1_train,
+savemat('.\\result\\result_LSTM.mat', {'F1_train': F1_train,
                             'G_train': G_train,
                             'F1_val': F1_val,
                             'G_val': G_val,
