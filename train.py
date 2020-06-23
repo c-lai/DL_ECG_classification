@@ -92,14 +92,15 @@ def train(args, params):
     if params.get("generator", False):
         train_gen = load.data_generator(batch_size, preproc, *train)
         dev_gen = load.data_generator(batch_size, preproc, *dev)
-        metrics = network_util.Metrics_multi_class(load.data_generator_no_shuffle(batch_size, preproc, *train),
-                                                   int(len(train[0]) / batch_size),
-                                                   load.data_generator_no_shuffle(batch_size, preproc, *dev),
-                                                   int(len(dev[0]) / batch_size),
-                                                   load.data_generator_no_shuffle(batch_size, preproc, *test),
-                                                   int(len(test[0]) / batch_size),
-                                                   batch_size=batch_size,
-                                                   save_dir=save_dir)
+        metrics = network_util.Metrics_multi_class_from_generator(
+            load.data_generator_no_shuffle(batch_size, preproc, *train),
+            int(len(train[0]) / batch_size),
+            load.data_generator_no_shuffle(batch_size, preproc, *dev),
+            int(len(dev[0]) / batch_size),
+            load.data_generator_no_shuffle(batch_size, preproc, *test),
+            int(len(test[0]) / batch_size),
+            batch_size=batch_size,
+            save_dir=save_dir)
         model.fit_generator(
             train_gen,
             steps_per_epoch=int(len(train[0]) / batch_size),

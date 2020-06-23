@@ -139,7 +139,7 @@ end
 F1_class_val_NN = zeros(5,9);
 F1_class_train_NN = zeros(5,9);
 for i = 1:5
-    load(['NN_results_',num2str(i)]);
+    load(['.\result\decision_result_NN_',num2str(i)]);
     pred_label = pred_label_val;
     true = true_label_val;
     for c = 1:9
@@ -163,7 +163,7 @@ end
 F1_class_val_tree = zeros(5,9);
 F1_class_train_tree = zeros(5,9);
 for i = 1:5
-    load(['tree_results_1000_subset_',num2str(i)]);
+    load(['.\result\decision_result_tree_1000_subset_',num2str(i)]);
     pred_label = pred_label_val;
     true = true_label_val;
     for c = 1:9
