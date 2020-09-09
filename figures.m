@@ -1,15 +1,19 @@
-load('forward_subset_selection_5mean_dropout_relu_F1_final3.mat')
 %% Subset selection F1
+n_obs = size(F1_train,2);
+ts = tinv(0.975,n_obs-1);
 figure
-errorbar(mean(F1_train,2),2.7764*std(F1_train,0,2)/sqrt(5),'LineWidth',1)
+errorbar(mean(F1_train,2),ts*std(F1_train,0,2)/sqrt(n_obs),'LineWidth',1)
 hold on
-errorbar(mean(F1_val,2),2.7764*std(F1_val,0,2)/sqrt(5),'LineWidth',1)
+errorbar(mean(F1_val,2),ts*std(F1_val,0,2)/sqrt(n_obs),'LineWidth',1)
 hold on
-errorbar(mean(F1_test,2),2.7764*std(F1_test,0,2)/sqrt(5),'LineWidth',1)
+errorbar(mean(F1_test,2),ts*std(F1_test,0,2)/sqrt(n_obs),'LineWidth',1)
 xlim([1,12]), xlabel('Number of leads used')
-ylim([0.6,0.9]), ylabel('F1')
-legend('F1 on training set','F1 on validation set','F1 on testing set',...
-    'Location','southeast')
+ylim([0.65,1])
+legend('training','validation','test','Location','southeast')
+
+%% t-test
+[h_val,p_val] = ttest2(F1_val(4,:),F1_val(12,:))
+[h_test,p_test] = ttest2(F1_test(4,:),F1_test(12,:))
 
 %% Subset selection J
 figure
@@ -24,11 +28,11 @@ legend('J on training set','J on validation set','J on testing set',...
 
 %% Subset selection AUC
 figure
-errorbar(mean(AUC_train,2),2.2622*std(AUC_train,0,2)/sqrt(10),'LineWidth',1)
+errorbar(mean(AUC_train,2),std(AUC_train,0,2)/sqrt(10),'LineWidth',1)
 hold on
-errorbar(mean(AUC_val,2),2.2622*std(AUC_val,0,2)/sqrt(10),'LineWidth',1)
+errorbar(mean(AUC_val,2),std(AUC_val,0,2)/sqrt(10),'LineWidth',1)
 hold on
-errorbar(mean(AUC_test,2),2.2622*std(AUC_test,0,2)/sqrt(10),'LineWidth',1)
+errorbar(mean(AUC_test,2),std(AUC_test,0,2)/sqrt(10),'LineWidth',1)
 xlim([1,12])
 legend('AUC on training set','AUC on validation set','AUC on testing set',...
     'Location','southeast')
@@ -72,7 +76,10 @@ end
 hold off
 
 %% Heatmap test
-rhythm = {"AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"};
+prediction = {"AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"};
+% patients = {"AF(F1=0.95)", "I-AVB(F1=0.83)", "LBBB(F1=0.91)", "Normal(F1=0.70)", ...
+%     "PAC(F1=0.63)", "PVC(F1=0.77)", "RBBB(F1=0.92)", "STD(F1=0.75)", "STE(F1=0.49)"};
+patients = {"AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"};
 true = true_label_test;
 pred_score = pred_score_test;
 confmat = [];
@@ -96,10 +103,10 @@ end
 figure
 imagesc(confmat), colorbar, colormap('hot')
 xticks(1:9)
-xticklabels(rhythm)
-xlabel('Prediction')
+xticklabels(prediction)
+xlabel('Interpretation')
 yticks(label_pos)
-yticklabels(rhythm)
+yticklabels(patients)
 ylabel('Patients')
 hold on
 y=0;
@@ -122,6 +129,19 @@ for c = 1:9
     title(rhythm(c))
 end
 
+%% Permutation importance polar map
+figure
+theta = 0:pi/6:2*pi;
+rhythm = {"AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"};
+for c = 1:9
+    importance = [lead_permu_importance(c,:), lead_permu_importance(c,1)];
+    subplot(3,3,c)
+    polarplot(theta, importance, 'Marker', 'o', 'LineWidth', 1)
+    thetaticks(0:30:330)
+    thetaticklabels({'I','II','III','aVR','aVL','aVF','V1','V2','V3','V4','V5','V6'})
+    title(rhythm(c))
+end
+
 %% AUC
 figure
 rhythm = {"AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE"};
@@ -132,8 +152,21 @@ for c = 1:9
     [X_test,Y_test,T_test,AUC_test] = perfcurve(true_label_test(:,c),pred_score_test(:,c),1);
     plot(X_test,Y_test,'LineWidth',2), axis square
     title(rhythm(c))
-    legend(['validation AUC=',num2str(AUC_val)],['test AUC=',num2str(AUC_test)],'location','south')
+    legend('validation','test','location','south')
+    xlabel('1 - Specificity')
+    ylabel('Sensitivity')
+%     legend(['validation AUC=',num2str(AUC_val)],['test AUC=',num2str(AUC_test)],'location','south')
 end
+
+%% concurrent
+label_matrix = zeros(9);
+multilabel = find(sum(true_label_train, 2)==2);
+for i = 1:length(multilabel)
+    idx = find(true_label_train(multilabel(i), :)==1);
+    label_matrix(idx(1),idx(2))=...
+        label_matrix(idx(1),idx(2))+1;
+end
+
 
 %% NN vs RF bar plot
 F1_class_val_NN = zeros(5,9);
@@ -244,3 +277,15 @@ box on
 legend('neural network', 'random forest', 'location','southeast')
 hold off
 
+%% F1
+F1_class_test_NN = zeros(1,9);
+
+pred_label = pred_label_val;
+true = true_label_val;
+for c = 1:9
+    true_c = true(:,c);
+    pred_c = int32(pred_label(:,c));
+    confmat = confusionmat(true_c, pred_c);
+    F1 = 2*confmat(2,2)/(2*confmat(2,2)+confmat(1,2)+confmat(2,1));
+    F1_class_test_NN(c) = F1;
+end
