@@ -42,9 +42,9 @@ class Preproc:
 
     def __init__(self, ecg, labels):
         self.labels = ("AF", "I-AVB", "LBBB", "Normal", "PAC", "PVC", "RBBB", "STD", "STE")
-        self.class_weight = self.calculate_weight(labels)
-        self.choose_label = range(9)
-        self.choose_leads = [1]
+        # self.class_weight = self.calculate_weight(labels)
+        self.choose_label = range(len(self.labels))
+        self.choose_leads = [0]
 
     def process(self, x, y):
         # single lead
@@ -54,21 +54,11 @@ class Preproc:
 
     def process_x(self, x):
         x_cropped = crop(x)
-        # means_expanded = np.outer(self.mean, np.ones(x[0].shape[1]))
-        # std_expaned = np.outer(self.std, np.ones(x[0].shape[1]))
-        # #x = (x - self.mean) / self.std
-        # x = (x - means_expanded) / std_expaned
-        # # x = x[:, :, :, None]
         x_array = np.asarray(x_cropped, dtype=np.float32)
         return x_array
 
     def process_y(self, y):
-        # TODO, awni, fix hack pad with noise for cinc
-        # y = pad([[self.class_to_int[c] for c in s] for s in y], val=3, dtype=np.int32)
-        # y = keras.utils.np_utils.to_categorical(
-        #         y, num_classes=len(self.classes))
-
-        y_vector = np.full((len(y), 9), 0)
+        y_vector = np.full((len(y), len(self.labels)), 0)
         for i, label in enumerate(y):
             for j, ref in enumerate(self.labels):
                 if ref in label:
@@ -104,6 +94,7 @@ def crop(x):
         cropped += (i[:, :min_len],)
     return cropped
 
+
 def pad(x, val=0, dtype=np.float32):
     max_len = max(i.shape[1] for i in x)
     padded = np.full((12, max_len), val, dtype=dtype).squeeze()
@@ -111,10 +102,12 @@ def pad(x, val=0, dtype=np.float32):
         padded[e, :len(i)] = i
     return padded
 
+
 def compute_mean_std(x):
     x = np.hstack(x)
     return (np.mean(x, axis=1).astype(np.float32),
            np.std(x, axis=1).astype(np.float32))
+
 
 def load_dataset(directory, lead=0):
     labels = []
@@ -145,6 +138,7 @@ def load_dataset(directory, lead=0):
 
     return ecgs, labels
 
+
 def load_ecg(record):
     if os.path.splitext(record)[1] == ".npy":
         ecg = np.load(record)
@@ -155,8 +149,9 @@ def load_ecg(record):
     trunc_samp = STEP * int(ecg.shape[1] / STEP)
     return ecg[:, :trunc_samp]
 
+
 if __name__ == "__main__":
-    data_directory = "Training_WFDB/all"
+    data_directory = "data/debug"
     train = load_dataset(data_directory, False)
     preproc = Preproc(*train)
     gen = data_generator(8, preproc, *train)

@@ -1,4 +1,3 @@
-/Training_WFDB/
 /__pycache__/
 save/
 documents/
@@ -6,4 +5,5 @@ features/
 result/
 .idea/
 config.json
-
+/data_old/
+/data/

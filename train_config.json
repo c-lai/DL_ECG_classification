@@ -1,9 +1,8 @@
 {
-    "train": "./Training_WFDB/train",
-    "dev": "./Training_WFDB/dev",
-    "test": "./Training_WFDB/test",
+    "train": "./data/train",
+    "dev": "./data/val",
+    "test": "./data/test",
     "save_dir": "save",
-    "generator": true,
     "learning_rate": 0.001,
     "batch_size": 8,
     "step": 512,

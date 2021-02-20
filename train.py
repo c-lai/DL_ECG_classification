@@ -19,7 +19,7 @@ import network_util
 
 # set random seed
 # for reproducible results, optimizer can't be Adam (can use RMSprop instead)
-seed_value = 3
+seed_value = 1
 os.environ['PYTHONHASHSEED'] = str(seed_value)
 np.random.seed(seed_value)
 tf.random.set_seed(seed_value)
@@ -89,36 +89,27 @@ def train(args, params):
 
     batch_size = params.get("batch_size", 4)
 
-    if params.get("generator", False):
-        train_gen = load.data_generator(batch_size, preproc, *train)
-        dev_gen = load.data_generator(batch_size, preproc, *dev)
-        metrics = network_util.Metrics_multi_class_from_generator(
-            load.data_generator_no_shuffle(batch_size, preproc, *train),
-            int(len(train[0]) / batch_size),
-            load.data_generator_no_shuffle(batch_size, preproc, *dev),
-            int(len(dev[0]) / batch_size),
-            load.data_generator_no_shuffle(batch_size, preproc, *test),
-            int(len(test[0]) / batch_size),
-            batch_size=batch_size,
-            save_dir=save_dir)
-        model.fit_generator(
-            train_gen,
-            steps_per_epoch=int(len(train[0]) / batch_size),
-            epochs=MAX_EPOCHS,
-            validation_data=dev_gen,
-            validation_steps=int(len(dev[0]) / batch_size),
-            # class_weight=preproc.get_weight(), #for single class models
-            callbacks=[checkpointer, metrics, reduce_lr, stopping],
-            shuffle=True)
-    else:
-        train_x, train_y = preproc.process(*train)
-        dev_x, dev_y = preproc.process(*dev)
-        model.fit(
-            train_x, train_y,
-            batch_size=batch_size,
-            epochs=MAX_EPOCHS,
-            validation_data=(dev_x, dev_y),
-            callbacks=[checkpointer, metrics, reduce_lr, stopping])
+    train_gen = load.data_generator(batch_size, preproc, *train)
+    dev_gen = load.data_generator(batch_size, preproc, *dev)
+    metrics = network_util.Metrics_multi_class_from_generator(
+        load.data_generator_no_shuffle(batch_size, preproc, *train),
+        int(len(train[0]) / batch_size),
+        load.data_generator_no_shuffle(batch_size, preproc, *dev),
+        int(len(dev[0]) / batch_size),
+        load.data_generator_no_shuffle(batch_size, preproc, *test),
+        int(len(test[0]) / batch_size),
+        batch_size=batch_size,
+        save_dir=save_dir)
+    model.fit_generator(
+        train_gen,
+        steps_per_epoch=int(len(train[0]) / batch_size),
+        epochs=MAX_EPOCHS,
+        validation_data=dev_gen,
+        validation_steps=int(len(dev[0]) / batch_size),
+        # class_weight=preproc.get_weight(), #for single class models
+        callbacks=[checkpointer, metrics, reduce_lr, stopping],
+        shuffle=True)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

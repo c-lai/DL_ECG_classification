@@ -11,9 +11,23 @@ xlim([1,12]), xlabel('Number of leads used')
 ylim([0.65,1])
 legend('training','validation','test','Location','southeast')
 
-%% t-test
-[h_val,p_val] = ttest2(F1_val(4,:),F1_val(12,:))
-[h_test,p_test] = ttest2(F1_test(4,:),F1_test(12,:))
+%% significance test
+[h_norm_val_subset, p_norm_val_subset, ~] = swtest(F1_val(4,:));
+[h_norm_val_full, p_norm_val_full, ~] = swtest(F1_val(12,:));
+if (~h_norm_val_subset)&&(~h_norm_val_full)
+    [h_val,p_val] = ttest2(F1_val(4,:),F1_val(12,:))
+else
+    [p_val,h_val] = ranksum(F1_val(4,:),F1_val(12,:))
+end
+
+[h_norm_test_subset, p_norm_test_subset, ~] = swtest(F1_test(4,:));
+[h_norm_test_full, p_norm_test_full, ~] = swtest(F1_test(12,:));
+if (~h_norm_val_subset)&&(~h_norm_val_full)
+    [h_test,p_test] = ttest2(F1_test(4,:),F1_test(12,:))
+else
+    [p_test,h_test] = ranksum(F1_test(4,:),F1_test(12,:))
+end
+
 
 %% Subset selection J
 figure
@@ -71,7 +85,7 @@ hold on
 y=0;
 for i=1:8
     y = y+class_size(i);
-    line([0,10],[y,y],'Color','w','LineWidth',0.8,'LineStyle','--')
+    line_gender([0,10],[y,y],'Color','w','LineWidth',0.8,'LineStyle','--')
 end
 hold off
 
@@ -112,7 +126,7 @@ hold on
 y=0;
 for i=1:8
     y = y+class_size(i);
-    line([0,10],[y,y],'Color','w','LineWidth',0.8,'LineStyle','--')
+    line_gender([0,10],[y,y],'Color','w','LineWidth',0.8,'LineStyle','--')
 end
 hold off
 
@@ -152,10 +166,10 @@ for c = 1:9
     [X_test,Y_test,T_test,AUC_test] = perfcurve(true_label_test(:,c),pred_score_test(:,c),1);
     plot(X_test,Y_test,'LineWidth',2), axis square
     title(rhythm(c))
-    legend('validation','test','location','south')
+%     legend('validation','test','location','south')
     xlabel('1 - Specificity')
     ylabel('Sensitivity')
-%     legend(['validation AUC=',num2str(AUC_val)],['test AUC=',num2str(AUC_test)],'location','south')
+    legend(['AUC=',num2str(round(AUC_val, 3))],['AUC=',num2str(round(AUC_test, 3))],'location','south')
 end
 
 %% concurrent
@@ -280,12 +294,66 @@ hold off
 %% F1
 F1_class_test_NN = zeros(1,9);
 
-pred_label = pred_label_val;
-true = true_label_val;
-for c = 1:9
-    true_c = true(:,c);
+pred_label = pred_label_test;
+true = true_label_test;
+for c = 1:5
+    true_c = int32(true(:,c));
     pred_c = int32(pred_label(:,c));
     confmat = confusionmat(true_c, pred_c);
     F1 = 2*confmat(2,2)/(2*confmat(2,2)+confmat(1,2)+confmat(2,1));
     F1_class_test_NN(c) = F1;
 end
+
+%% AUC new data
+figure
+rhythm = {"AF", "AVB", "BBB", "Normal", "ST Abnormality"};
+for c = 1:5
+    subplot(3,3,c)
+    [X_test,Y_test,T_test,AUC_test] = perfcurve(true_label_test(:,c),pred_score_test(:,c),1);
+    plot(X_test,Y_test,'LineWidth',2), axis square
+    title(rhythm(c))
+    xlabel('1 - Specificity')
+    ylabel('Sensitivity')
+    legend(['test AUC=',num2str(AUC_test)],'location','south')
+end
+
+%% get rid of PAV, PVC
+PAC_idx = find(true_label_test(:,5)==1);
+PVC_idx = find(true_label_test(:,6)==1);
+
+true_label_test([PAC_idx;PVC_idx], :)=[];
+pred_label_test([PAC_idx;PVC_idx], :)=[];
+pred_score_test([PAC_idx;PVC_idx], :)=[];
+
+true_label_test(:,[5,6])=[];
+pred_label_test(:,[5,6])=[];
+pred_score_test(:,[5,6])=[];
+
+%%
+complete_f1 = [0.5361, 0.5365, 0.5360, 0.5356, 0.5369, 0.5392, 0.5356, 0.5377, 0.5364, 0.5350];
+subset_f1 = [0.5478, 0.5477, 0.5481, 0.5463, 0.5472, 0.5475, 0.5482, 0.5468, 0.5464, 0.5461];
+[h_test,p_test] = ttest2(complete_f1,subset_f1)
+
+%% gender statistics
+hea_files = dir('./*.hea');
+male = 0;
+female = 0;
+for i = 1:size(hea_files)
+    fid = fopen(hea_files(i).name);
+    for l = 1:15
+        line_gender = fgetl(fid);
+    end
+    line_diagnosis = fgetl(fid);
+    fclose(fid);
+    gender = line_gender(7:end);
+    if ~(contains(line_diagnosis,'284470004')||contains(line_diagnosis,'59118001'))
+        if length(gender) == 4
+            male=male+1;
+        elseif length(gender) == 6
+            female=female+1;
+        end
+    end 
+end
+        
+    
+    

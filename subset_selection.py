@@ -1,21 +1,19 @@
+# Conduct subset selection
+# Instructions: change feature locations, models, experiment_name, etc.
+
 import os
 import sys
 import numpy as np
 import keras
 from keras.models import Sequential
 from keras.layers import Dense, LeakyReLU, ReLU, BatchNormalization
-from scipy.io import loadmat
+from scipy.io import loadmat, savemat
 from evaluate_12ECG_score import compute_beta_score
 from keras.optimizers import Adam
-import load
-from train import get_filename_for_saving, make_save_dir
-from network_util import Metrics_multi_class
-from network_util import weighted_mse, weighted_binary_crossentropy
 from network_util import find_best_threshold, calculate_F_G, calculate_AUC
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.inspection import permutation_importance
-from scipy.io import savemat
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind, shapiro, mannwhitneyu
 import copy
 
 
@@ -325,31 +323,32 @@ def forward_subset_selection(f_train, y_train, f_val, y_val, f_test, y_test,
 
 if __name__ == '__main__':
     # load data
-    f = loadmat('.\\features\\features_train_final.mat')
+    f = loadmat('.\\features\\features_train.mat')
     f_train = np.concatenate((f['features_1_train'], f['features_2_train'], f['features_3_train'],
                               f['features_4_train'], f['features_5_train'], f['features_6_train'],
                               f['features_7_train'], f['features_8_train'], f['features_9_train'],
                               f['features_10_train'], f['features_11_train'], f['features_12_train']), axis=1)
-    y_train = loadmat('.\\features\\y_train_final.mat')['y_train']
+    y_train = loadmat('.\\features\\y_train.mat')['y_train']
 
-    f = loadmat('.\\features\\features_dev_final.mat')
+    f = loadmat('.\\features\\features_dev.mat')
     f_dev = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_3_dev'],
                             f['features_4_dev'], f['features_5_dev'], f['features_6_dev'],
                             f['features_7_dev'], f['features_8_dev'], f['features_9_dev'],
                             f['features_10_dev'], f['features_11_dev'], f['features_12_dev']), axis=1)
-    y_dev = loadmat('.\\features\\y_dev_final.mat')['y_dev']
+    y_dev = loadmat('.\\features\\y_dev.mat')['y_dev']
 
-    f = loadmat('.\\features\\features_test_final.mat')
+    f = loadmat('.\\features\\features_test.mat')
     f_test = np.concatenate((f['features_1_test'], f['features_2_test'], f['features_3_test'],
                              f['features_4_test'], f['features_5_test'], f['features_6_test'],
                              f['features_7_test'], f['features_8_test'], f['features_9_test'],
                              f['features_10_test'], f['features_11_test'], f['features_12_test']), axis=1)
-    y_test = loadmat('.\\features\\y_test_final.mat')['y_test']
+    y_test = loadmat('.\\features\\y_test.mat')['y_test']
 
     repeat_time = 10
     rhythm_class = range(9)
     model = 1  # 1: NN; 2: random forest
-    experiment_name = 'forward_subset_selection_NN_10mean_F1_v3.mat'
+    experiment_name = 'NN_rep10_F1'
+    file_name = 'forward_subset_selection_'+experiment_name+'.mat'
 
     forward_subset_selection(f_train, y_train, f_dev, y_dev, f_test, y_test,
-                             repeat_time, rhythm_class, model, experiment_name)
+                             repeat_time, rhythm_class, model, file_name)

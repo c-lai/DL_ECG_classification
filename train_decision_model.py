@@ -1,3 +1,6 @@
+# Train decision-making classifier (NN)
+# Instruction: change training settings, experiment_name, subset_result_file, model_filepath, etc.
+
 import os
 import numpy as np
 from scipy.io import loadmat
@@ -10,6 +13,8 @@ from subset_selection import train_NN_classifier, train_tree_classifier
 import json
 import sys
 import pickle
+import time
+import random
 
 
 def permutation_importances_F1(rf, x, y, times):
@@ -30,31 +35,37 @@ def permutation_importances_F1(rf, x, y, times):
 
 if __name__ == '__main__':
     # load data
-    f = loadmat('.\\features\\features_train_final.mat')
+    f = loadmat('.\\features\\features_train.mat')
     f_train = np.concatenate((f['features_1_train'], f['features_2_train'], f['features_3_train'],
                               f['features_4_train'], f['features_5_train'], f['features_6_train'],
                               f['features_7_train'], f['features_8_train'], f['features_9_train'],
                               f['features_10_train'], f['features_11_train'], f['features_12_train']), axis=1)
-    y_train = loadmat('.\\features\\y_train_final.mat')['y_train']
+    y_train = loadmat('.\\features\\y_train.mat')['y_train']
 
-    f = loadmat('.\\features\\features_dev_final.mat')
+    f = loadmat('.\\features\\features_dev.mat')
     f_dev = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_3_dev'],
                             f['features_4_dev'], f['features_5_dev'], f['features_6_dev'],
                             f['features_7_dev'], f['features_8_dev'], f['features_9_dev'],
                             f['features_10_dev'], f['features_11_dev'], f['features_12_dev']), axis=1)
-    y_dev = loadmat('.\\features\\y_dev_final.mat')['y_dev']
+    y_dev = loadmat('.\\features\\y_dev.mat')['y_dev']
 
-    f = loadmat('.\\features\\features_test_final.mat')
+    f = loadmat('.\\features\\features_test.mat')
     f_test = np.concatenate((f['features_1_test'], f['features_2_test'], f['features_3_test'],
                              f['features_4_test'], f['features_5_test'], f['features_6_test'],
                              f['features_7_test'], f['features_8_test'], f['features_9_test'],
                              f['features_10_test'], f['features_11_test'], f['features_12_test']), axis=1)
-    y_test = loadmat('.\\features\\y_test_final.mat')['y_test']
+    y_test = loadmat('.\\features\\y_test.mat')['y_test']
 
-    subset = True
-    model = 1
-    ensemble = False
-    experiment_name = 'decision_result_10_NN_v3_ori'
+    subset = True  # True: use subset; False: use 12-lead ECG
+    model = 1  # 1: NN; 2: Random Forest
+    ensemble = False  # True: 9 models for 9 rhythms; False: 1 model for all 9 rhythms
+    # model=2 not compatible with ensemble=False
+    experiment_name = 'NN_rep10_F1'
+    file_name = experiment_name
+    if ensemble:
+        file_name = file_name+'_ensemble'
+    if not subset:
+        file_name = file_name+'_complete'
 
     lead_subsets = []
     train_pred_score_list = []
@@ -65,7 +76,7 @@ if __name__ == '__main__':
     test_pred_label_list = []
     if ensemble:
         for c in range(9):
-            subset_result_file = 'forward_subset_selection_NN_10mean_F1_rhythm'+str(c)+'_v3.mat'
+            subset_result_file = 'forward_subset_selection_'+experiment_name+'_rhythm'+str(c)+'_v3.mat'
             file_path = os.path.join('.\\result\\subset_selection', subset_result_file)
             f = loadmat(file_path)
             leads = f['leads_selected'].flatten().tolist()
@@ -88,10 +99,11 @@ if __name__ == '__main__':
                 feature_index.append(np.arange(32 * l, 32 * (l + 1), 1))
             feature_index = np.array(feature_index).flatten()
 
-            model_folder = os.path.join('.\\save', experiment_name)
+            model_folder = os.path.join('.\\save', 'decision_model_'+file_name)
             if not os.path.exists(model_folder):
                 os.makedirs(model_folder)
-            model_filepath = os.path.join(model_folder, 'model_rhythm' + str(c) + '.h5')
+            start_time = str(int(time.time())) + '-' + str(random.randrange(1000))
+            model_filepath = os.path.join(model_folder, 'model_rhythm'+str(c)+'_'+start_time+'.h5')
 
             input_dim = feature_index.shape[0]
             output_dim = 1
@@ -144,56 +156,62 @@ if __name__ == '__main__':
         pred_label_test = np.concatenate(test_pred_label_list, axis=1)
         true_label_test = y_test
     else:
-        subset_result_file = 'forward_subset_selection_NN_10mean_F1_v3_ori.mat'
-        file_path = os.path.join('.\\result\\subset_selection', subset_result_file)
-        f = loadmat(file_path)
-        leads = f['leads_selected'].flatten().tolist()
-        p_value = f['p_value'].flatten()
-        t_value = f['t_value'].flatten()
+        if model == 1:
+            subset_result_file = 'forward_subset_selection_'+experiment_name+'.mat'
+            file_path = os.path.join('.\\result\\subset_selection', subset_result_file)
+            f = loadmat(file_path)
+            leads = f['leads_selected'].flatten().tolist()
+            p_value = f['p_value'].flatten()
+            t_value = f['t_value'].flatten()
 
-        lead_subset = []
-        for i in range(12):
             if subset:
-                if p_value[i].item() <= 0.05 and t_value[i] >= 0:
-                    lead_subset.append(leads[i])
-                else:
-                    break
+                lead_subset = []
+                for i in range(12):
+                    if p_value[i].item() <= 0.05 and t_value[i] >= 0:
+                        lead_subset.append(leads[i])
+                    else:
+                        break
             else:
-                lead_subset.append(leads[i])
-        lead_subsets.append(lead_subset)
+                lead_subset = list(range(12))
+            lead_subsets.append(lead_subset)
 
-        feature_index = []
-        for l in lead_subset:
-            feature_index.append(np.arange(32 * l, 32 * (l + 1), 1))
-        feature_index = np.array(feature_index).flatten()
+            feature_index = []
+            for l in lead_subset:
+                feature_index.append(np.arange(32 * l, 32 * (l + 1), 1))
+            feature_index = np.array(feature_index).flatten()
 
-        model_folder = os.path.join('.\\save', experiment_name)
-        if not os.path.exists(model_folder):
-            os.makedirs(model_folder)
-        model_filepath = os.path.join(model_folder, 'NN_model.h5')
+            model_folder = os.path.join('.\\save', 'decision_model_'+file_name)
+            if not os.path.exists(model_folder):
+                os.makedirs(model_folder)
+            start_time = str(int(time.time())) + '-' + str(random.randrange(1000))
+            model_filepath = os.path.join(model_folder, start_time+'.h5')
 
-        input_dim = feature_index.shape[0]
-        output_dim = 9
+            input_dim = feature_index.shape[0]
+            output_dim = 9
 
-        NN_model, F1_train, G_train, AUC_train, \
-        F1_val, G_val, AUC_val, \
-        F1_test, G_test, AUC_test = \
-            train_NN_classifier(input_dim, output_dim,
-                                f_train[:, feature_index], y_train,
-                                f_dev[:, feature_index], y_dev,
-                                f_test[:, feature_index], y_test)
-        NN_model.save(model_filepath)
-        pred_score_train = np.asarray(NN_model.predict(f_train[:, feature_index]))
-        pred_score_val = np.asarray(NN_model.predict(f_dev[:, feature_index]))
-        pred_score_test = np.asarray(NN_model.predict(f_test[:, feature_index]))
+            NN_model, F1_train, G_train, AUC_train, \
+            F1_val, G_val, AUC_val, \
+            F1_test, G_test, AUC_test = \
+                train_NN_classifier(input_dim, output_dim,
+                                    f_train[:, feature_index], y_train,
+                                    f_dev[:, feature_index], y_dev,
+                                    f_test[:, feature_index], y_test)
+            NN_model.save(model_filepath)
+            pred_score_train = np.asarray(NN_model.predict(f_train[:, feature_index]))
+            pred_score_val = np.asarray(NN_model.predict(f_dev[:, feature_index]))
+            pred_score_test = np.asarray(NN_model.predict(f_test[:, feature_index]))
 
-        pred_label_train = np.ceil(pred_score_train - 0.5)
-        pred_label_val = np.ceil(pred_score_val - 0.5)
-        pred_label_test = np.ceil(pred_score_test - 0.5)
+            pred_label_train = np.ceil(pred_score_train - 0.5)
+            pred_label_val = np.ceil(pred_score_val - 0.5)
+            pred_label_test = np.ceil(pred_score_test - 0.5)
 
-        true_label_train = y_train
-        true_label_val = y_dev
-        true_label_test = y_test
+            true_label_train = y_train
+            true_label_val = y_dev
+            true_label_test = y_test
+        elif model == 2:
+            sys.exit('ERROR: model=2 not compatible with ensemble=False')
+        else:
+            sys.exit('ERROR: No corresponding model (model=1: neural network; model=2: random forest)')
 
     accuracy_train, f_measure_train, Fbeta_measure_train, Gbeta_measure_train = \
         compute_beta_score(true_label_train, pred_label_train, 1, 9)
@@ -202,7 +220,7 @@ if __name__ == '__main__':
     accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test = \
         compute_beta_score(true_label_test, pred_label_test, 1, 9)
 
-    save_dir = os.path.join('.\\result', experiment_name+'.mat')
+    save_dir = os.path.join('.\\result', 'decision_result_'+file_name+'.mat')
     savemat(save_dir,
             {'accuracy_train': accuracy_train,
              'F1_train': f_measure_train,
@@ -219,7 +237,7 @@ if __name__ == '__main__':
              'pred_score_test': pred_score_test,
              'pred_label_test': pred_label_test,
              'true_label_test': true_label_test})
-    with open('.\\result\\lead_subsets_'+experiment_name+'.txt', 'w') as f:
+    with open('.\\result\\subset_selection\\lead_subsets_'+file_name+'.txt', 'w') as f:
         f.write(json.dumps(lead_subsets))
 
 

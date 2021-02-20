@@ -1,3 +1,6 @@
+# Evaluate single-lead models
+# Instructions: change leads_model_path and save path
+
 import numpy as np
 import keras
 import os
@@ -5,15 +8,15 @@ import os
 import load
 import util
 from keras import Model
-from network import weighted_mse, weighted_cross_entropy, weighted_binary_crossentropy
 from network_util import calculate_F_G
+from network_util import weighted_mse, weighted_cross_entropy, weighted_binary_crossentropy
 from scipy.io import savemat
 from evaluate_12ECG_score import compute_beta_score
 
 # path for data
-data_path_train = ".\\Training_WFDB\\train"
-data_path_dev = ".\\Training_WFDB\\dev"
-data_path_test = ".\\Training_WFDB\\test"
+data_path_train = ".\\data_old\\train"
+data_path_dev = ".\\data_old\\dev"
+data_path_test = ".\\data_old\\test"
 
 # path for lead models
 leads = range(1, 13)
@@ -56,23 +59,23 @@ leads_model_path = {'lead1': ".\\save\\lead1_ResNet8_32_WCE_v2\\epoch032-val_los
                     'lead12': ".\\save\\lead12_ResNet8_32_WCE_v2\\epoch022-val_loss0.452-train_loss0.246.hdf5"}
 
 # load data
-dataset_val = load.load_dataset(data_path_dev, False)
 dataset_train = load.load_dataset(data_path_train, False)
+dataset_val = load.load_dataset(data_path_dev, False)
 dataset_test = load.load_dataset(data_path_test, False)
 
 # load models and calculate metrics
-F1_train = np.zeros((12, 9))
-G_train = np.zeros((12, 9))
-F1_val = np.zeros((12, 9))
-G_val = np.zeros((12, 9))
-F1_test = np.zeros((12, 9))
-G_test = np.zeros((12, 9))
-F1_lead_train = np.zeros((12, 1))
-G_lead_train = np.zeros((12, 1))
-F1_lead_val = np.zeros((12, 1))
-G_lead_val = np.zeros((12, 1))
-F1_lead_test = np.zeros((12, 1))
-G_lead_test = np.zeros((12, 1))
+F1_train_leadxrhythm = np.zeros((12, 9))
+G_train_leadxrhythm = np.zeros((12, 9))
+F1_val_leadxrhythm = np.zeros((12, 9))
+G_val_leadxrhythm = np.zeros((12, 9))
+F1_test_leadxrhythm = np.zeros((12, 9))
+G_test_leadxrhythm = np.zeros((12, 9))
+F1_train_lead = np.zeros((12, 1))
+G_train_lead = np.zeros((12, 1))
+F1_val_lead = np.zeros((12, 1))
+G_val_lead = np.zeros((12, 1))
+F1_test_lead = np.zeros((12, 1))
+G_test_lead = np.zeros((12, 1))
 
 for i, lead in enumerate(leads):
     preproc_i = util.load(os.path.dirname(leads_model_path['lead'+str(lead)]))
@@ -87,12 +90,12 @@ for i, lead in enumerate(leads):
     y_pred_label_train_i = np.ceil(y_pred_score_train_i - 0.5)
     accuracy_train, f_measure_train, Fbeta_measure_train, Gbeta_measure_train = \
         compute_beta_score(y_train_i, y_pred_label_train_i, 1, 9)
-    F1_lead_train[i, 0] = f_measure_train
-    G_lead_train[i, 0] = Gbeta_measure_train
+    F1_train_lead[i, 0] = f_measure_train
+    G_train_lead[i, 0] = Gbeta_measure_train
     for c in range(9):
         F1_c, G_c, FG_mean_c = calculate_F_G(y_pred_label_train_i[:, c], y_train_i[:, c], 1)
-        F1_train[i, c] = F1_c
-        G_train[i, c] = G_c
+        F1_train_leadxrhythm[i, c] = F1_c
+        G_train_leadxrhythm[i, c] = G_c
 
     val_gen_i = load.data_generator_no_shuffle(batch_size, preproc_i, *dataset_val)
     y_val_i = np.empty((len(dataset_val[0]), 9), dtype=np.int64)
@@ -102,12 +105,12 @@ for i, lead in enumerate(leads):
     y_pred_label_val_i = np.ceil(y_pred_score_val_i - 0.5)
     accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val = \
         compute_beta_score(y_val_i, y_pred_label_val_i, 1, 9)
-    F1_lead_val[i, 0] = f_measure_val
-    G_lead_val[i, 0] = Gbeta_measure_val
+    F1_val_lead[i, 0] = f_measure_val
+    G_val_lead[i, 0] = Gbeta_measure_val
     for c in range(9):
         F1_c, G_c, FG_mean_c = calculate_F_G(y_pred_label_val_i[:, c], y_val_i[:, c], 1)
-        F1_val[i, c] = F1_c
-        G_val[i, c] = G_c
+        F1_val_leadxrhythm[i, c] = F1_c
+        G_val_leadxrhythm[i, c] = G_c
 
     test_gen_i = load.data_generator_no_shuffle(batch_size, preproc_i, *dataset_test)
     y_test_i = np.empty((len(dataset_test[0]), 9), dtype=np.int64)
@@ -117,27 +120,27 @@ for i, lead in enumerate(leads):
     y_pred_label_test_i = np.ceil(y_pred_score_test_i - 0.5)
     accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test = \
         compute_beta_score(y_test_i, y_pred_label_test_i, 1, 9)
-    F1_lead_test[i, 0] = f_measure_test
-    G_lead_test[i, 0] = Gbeta_measure_test
+    F1_test_lead[i, 0] = f_measure_test
+    G_test_lead[i, 0] = Gbeta_measure_test
     for c in range(9):
         F1_c, G_c, FG_mean_c = calculate_F_G(y_pred_label_test_i[:, c], y_test_i[:, c], 1)
-        F1_test[i, c] = F1_c
-        G_test[i, c] = G_c
+        F1_test_leadxrhythm[i, c] = F1_c
+        G_test_leadxrhythm[i, c] = G_c
 
 # save data
 if not os.path.exists('.\\result'):
     os.makedirs('.\\result')
 
-savemat('.\\result\\result_single_lead.mat',
-        {'F1_train': F1_train,
-         'G_train': G_train,
-         'F1_lead_train': F1_lead_train,
-         'G_lead_train': G_lead_train,
-         'F1_val': F1_val,
-         'G_val': G_val,
-         'F1_lead_val': F1_lead_val,
-         'G_lead_val': G_lead_val,
-         'F1_test': F1_test,
-         'G_test': G_test,
-         'F1_lead_test': F1_lead_test,
-         'G_lead_test': G_lead_test})
+savemat('.\\result\\result_single_lead_model.mat',
+        {'F1_train_leadxrhythm': F1_train_leadxrhythm,
+         'G_train_leadxrhythm': G_train_leadxrhythm,
+         'F1_train_lead': F1_train_lead,
+         'G_train_lead': G_train_lead,
+         'F1_val_leadxrhythm': F1_val_leadxrhythm,
+         'G_val_leadxrhythm': G_val_leadxrhythm,
+         'F1_val_lead': F1_val_lead,
+         'G_val_lead': G_val_lead,
+         'F1_test_leadxrhythm': F1_test_leadxrhythm,
+         'G_test_leadxrhythm': G_test_leadxrhythm,
+         'F1_test_lead': F1_test_lead,
+         'G_test_lead': G_test_lead})
