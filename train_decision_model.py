@@ -220,7 +220,10 @@ if __name__ == '__main__':
     accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test = \
         compute_beta_score(true_label_test, pred_label_test, 1, 9)
 
-    save_dir = os.path.join('.\\result', 'decision_result_'+file_name+'.mat')
+    save_folder = os.path.join('.\\result', 'decision_result', file_name)
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+    save_dir = os.path.join(save_folder, 'decision_result_'+start_time+'.mat')
     savemat(save_dir,
             {'accuracy_train': accuracy_train,
              'F1_train': f_measure_train,
