@@ -57,30 +57,6 @@ leads_model_path = {'lead1': ".\\save\\lead1_ResNet8_32_WCE\\epoch022-val_loss0.
                     'lead10': ".\\save\\lead10_ResNet8_32_WCE\\epoch039-val_loss0.307-train_loss0.282.hdf5",
                     'lead11': ".\\save\\lead11_ResNet8_32_WCE\\epoch027-val_loss0.485-train_loss0.320.hdf5",
                     'lead12': ".\\save\\lead12_ResNet8_32_WCE\\epoch018-val_loss0.843-train_loss0.339.hdf5"}
-# leads_model_path = {'lead1': ".\\save\\lead1_ResNet8_NoDropout_32_WCE\\epoch014-val_loss0.557-train_loss0.156.hdf5",
-#                     'lead2': ".\\save\\lead2_ResNet8_NoDropout_32_WCE\\epoch017-val_loss0.241-train_loss0.089.hdf5",
-#                     'lead3': ".\\save\\lead3_ResNet8_NoDropout_32_WCE\\epoch022-val_loss0.279-train_loss0.124.hdf5",
-#                     'lead4': ".\\save\\lead4_ResNet8_NoDropout_32_WCE\\epoch012-val_loss0.300-train_loss0.130.hdf5",
-#                     'lead5': ".\\save\\lead5_ResNet8_NoDropout_32_WCE\\epoch012-val_loss0.389-train_loss0.206.hdf5",
-#                     'lead6': ".\\save\\lead6_ResNet8_NoDropout_32_WCE\\epoch014-val_loss0.275-train_loss0.129.hdf5",
-#                     'lead7': ".\\save\\lead7_ResNet8_NoDropout_32_WCE\\epoch008-val_loss0.738-train_loss0.226.hdf5",
-#                     'lead8': ".\\save\\lead8_ResNet8_NoDropout_32_WCE\\epoch015-val_loss0.321-train_loss0.166.hdf5",
-#                     'lead9': ".\\save\\lead9_ResNet8_NoDropout_32_WCE\\epoch052-val_loss0.307-train_loss0.183.hdf5",
-#                     'lead10': ".\\save\\lead10_ResNet8_NoDropout_32_WCE\\epoch024-val_loss0.367-train_loss0.146.hdf5",
-#                     'lead11': ".\\save\\lead11_ResNet8_NoDropout_32_WCE\\epoch020-val_loss0.494-train_loss0.175.hdf5",
-#                     'lead12': ".\\save\\lead12_ResNet8_NoDropout_32_WCE\\epoch017-val_loss0.939-train_loss0.191.hdf5"}
-# leads_model_path = {'lead1': ".\\save\\lead1_ResNet8_32_WCE_v2\\epoch032-val_loss0.452-train_loss0.176.hdf5",
-#                     'lead2': ".\\save\\lead2_ResNet8_32_WCE_v2\\epoch049-val_loss0.016-train_loss0.153.hdf5",
-#                     'lead3': ".\\save\\lead3_ResNet8_32_WCE_v2\\epoch023-val_loss0.095-train_loss0.295.hdf5",
-#                     'lead4': ".\\save\\lead4_ResNet8_32_WCE_v2\\epoch076-val_loss0.033-train_loss0.187.hdf5",
-#                     'lead5': ".\\save\\lead5_ResNet8_32_WCE_v2\\epoch053-val_loss0.122-train_loss0.197.hdf5",
-#                     'lead6': ".\\save\\lead6_ResNet8_32_WCE_v2\\epoch024-val_loss0.068-train_loss0.213.hdf5",
-#                     'lead7': ".\\save\\lead7_ResNet8_32_WCE_v2\\epoch021-val_loss0.370-train_loss0.250.hdf5",
-#                     'lead8': ".\\save\\lead8_ResNet8_32_WCE_v2\\epoch021-val_loss0.363-train_loss0.277.hdf5",
-#                     'lead9': ".\\save\\lead9_ResNet8_32_WCE_v2\\epoch043-val_loss0.015-train_loss0.140.hdf5",
-#                     'lead10': ".\\save\\lead10_ResNet8_32_WCE_v2\\epoch100-val_loss0.050-train_loss0.199.hdf5",
-#                     'lead11': ".\\save\\lead11_ResNet8_32_WCE_v2\\epoch021-val_loss0.704-train_loss0.260.hdf5",
-#                     'lead12': ".\\save\\lead12_ResNet8_32_WCE_v2\\epoch022-val_loss0.452-train_loss0.246.hdf5"}
 
 # load data
 dataset_ext = load.load_dataset(data_path_ext, False)

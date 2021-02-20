@@ -12,12 +12,12 @@ import pickle
 
 if __name__ == '__main__':
     # load data
-    f = loadmat('.\\features\\features_external_test_E_1.mat')
+    f = loadmat('.\\features\\features_external_test_E.mat')
     f_test = np.concatenate((f['features_1_test'], f['features_2_test'], f['features_3_test'],
                              f['features_4_test'], f['features_5_test'], f['features_6_test'],
                              f['features_7_test'], f['features_8_test'], f['features_9_test'],
                              f['features_10_test'], f['features_11_test'], f['features_12_test']), axis=1)
-    y_test = loadmat('.\\features\\y_external_test_E_1.mat')['y_test']
+    y_test = loadmat('.\\features\\y_external_test_E.mat')['y_test']
 
     subset = True
     model = 1
