@@ -15,22 +15,29 @@ import time
 import network
 import load
 import util
+import network_util
 
+# set random seed
+# for reproducible results, optimizer can't be Adam (can use RMSprop instead)
+seed_value = 1
+os.environ['PYTHONHASHSEED'] = str(seed_value)
+np.random.seed(seed_value)
+tf.random.set_seed(seed_value)
 
-# physical_devices = tf.config.experimental.list_physical_devices('GPU')
-# tf.config.experimental.set_memory_growth(physical_devices[0], True)
-# gpus = tf.config.experimental.list_physical_devices('GPU')
-# if gpus:
-#   # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
-#   try:
-#     tf.config.experimental.set_virtual_device_configuration(
-#         gpus[0],
-#         [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)])
-#     logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-#     print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-#   except RuntimeError as e:
-#     # Virtual devices must be set before GPUs have been initialized
-#     print(e)
+# configure GPU
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+  # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
+  try:
+    tf.config.experimental.set_virtual_device_configuration(
+        gpus[0],
+        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)])
+    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Virtual devices must be set before GPUs have been initialized
+    print(e)
+
 
 MAX_EPOCHS = 100
 
@@ -46,34 +53,26 @@ def get_filename_for_saving(save_dir):
             "epoch{epoch:03d}-val_loss{val_loss:.3f}-train_loss{loss:.3f}.hdf5")
 
 def train(args, params):
-
     print("Loading training set...")
     train = load.load_dataset(params['train'], params['lead'])
     print("Loading dev set...")
     dev = load.load_dataset(params['dev'], params['lead'])
+    print("Loading test set...")
+    test = load.load_dataset(params['test'], params['lead'])
     print("Building preprocessor...")
     preproc = load.Preproc(*train)
     print("Training size: " + str(len(train[0])) + " examples.")
     print("Dev size: " + str(len(dev[0])) + " examples.")
-
+    print("Test size: " + str(len(test[0])) + " examples.")
 
     save_dir = make_save_dir(params['save_dir'], args.experiment)
 
     util.save(preproc, save_dir)
 
-    # params.update({
-    #     "input_shape": [None, 1],
-    #     "num_categories": len(preproc.classes)
-    # })
+    random.seed(seed_value)
 
-    # model = network.build_network(**params)
-    # model = network.build_network_1lead(**params)
-    # model_path = ".\\save\\lead1_ResNet8_64_WMSE\\1586361669-991\\epoch017-val_loss0.392-train_loss0.179.hdf5"
-    # model_path = ".\\save\\lead2_ResNet8_64_WMSE\\1586365719-237\\epoch015-val_loss0.251-train_loss0.202.hdf5"
-    model_path = ".\\save\\lead4_ResNet8_64_WMSE\\1586384117-946\\epoch021-val_loss0.466-train_loss0.194.hdf5"
-    model = keras.models.load_model(model_path,
-                                    custom_objects={'weighted_mse': network.weighted_mse,
-                                                    'weighted_cross_entropy': network.weighted_cross_entropy})
+    model = network.build_network_ResNet(**params)
+    # model = network.build_network_LSTM(**params)
 
     stopping = keras.callbacks.EarlyStopping(patience=15)
 
@@ -90,27 +89,27 @@ def train(args, params):
 
     batch_size = params.get("batch_size", 4)
 
-    metrics = network.Metrics(preproc.process(dev[0], dev[1]), batch_size=batch_size, save_dir = save_dir)
+    train_gen = load.data_generator(batch_size, preproc, *train)
+    dev_gen = load.data_generator(batch_size, preproc, *dev)
+    metrics = network_util.Metrics_multi_class_from_generator(
+        load.data_generator_no_shuffle(batch_size, preproc, *train),
+        int(len(train[0]) / batch_size),
+        load.data_generator_no_shuffle(batch_size, preproc, *dev),
+        int(len(dev[0]) / batch_size),
+        load.data_generator_no_shuffle(batch_size, preproc, *test),
+        int(len(test[0]) / batch_size),
+        batch_size=batch_size,
+        save_dir=save_dir)
+    model.fit_generator(
+        train_gen,
+        steps_per_epoch=int(len(train[0]) / batch_size),
+        epochs=MAX_EPOCHS,
+        validation_data=dev_gen,
+        validation_steps=int(len(dev[0]) / batch_size),
+        # class_weight=preproc.get_weight(), #for single class models
+        callbacks=[checkpointer, metrics, reduce_lr, stopping],
+        shuffle=True)
 
-    if params.get("generator", False):
-        train_gen = load.data_generator(batch_size, preproc, *train)
-        dev_gen = load.data_generator(batch_size, preproc, *dev)
-        model.fit_generator(
-            train_gen,
-            steps_per_epoch=int(len(train[0]) / batch_size),
-            epochs=MAX_EPOCHS,
-            validation_data=dev_gen,
-            validation_steps=int(len(dev[0]) / batch_size),
-            callbacks=[checkpointer, metrics, reduce_lr, stopping])
-    else:
-        train_x, train_y = preproc.process(*train)
-        dev_x, dev_y = preproc.process(*dev)
-        model.fit(
-            train_x, train_y,
-            batch_size=batch_size,
-            epochs=MAX_EPOCHS,
-            validation_data=(dev_x, dev_y),
-            callbacks=[checkpointer, reduce_lr, stopping])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

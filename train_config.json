@@ -1,0 +1,11 @@
+{
+    "train": "./data/train",
+    "dev": "./data/val",
+    "test": "./data/test",
+    "save_dir": "save",
+    "learning_rate": 0.001,
+    "batch_size": 8,
+    "step": 512,
+    "block_num": 8,
+    "lead": false
+}

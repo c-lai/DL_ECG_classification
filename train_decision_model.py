@@ -1,152 +1,247 @@
-# first neural network with keras tutorial
+# Train decision-making classifier (NN)
+# Instruction: change training settings, experiment_name, subset_result_file, model_filepath, etc.
+
 import os
 import numpy as np
-import keras
-import tensorflow as tf
-import math
-from keras.models import Sequential
-from keras.layers import Dense
-from keras.callbacks import Callback
 from scipy.io import loadmat
 from evaluate_12ECG_score import compute_beta_score
-from keras.optimizers import Adam
-from network import weighted_mse, weighted_cross_entropy
-from train import get_filename_for_saving, make_save_dir
-from sklearn.metrics import confusion_matrix
-
-f_1 = loadmat('features_all_final.mat')
-# f_all_1 = np.concatenate((f['features_1_all'], f['features_2_all'], f['features_4_all']), axis=1)
-f_2 = loadmat('features_bm_all_standard.mat')
-# f_all_2 = np.concatenate((f['features_1_all'], f['features_2_all'], f['features_4_all']), axis=1)
-f_train = np.concatenate((f_1['features_1_all'], f_1['features_2_all'], f_1['features_4_all'],
-                          f_2['features_bm_1_all_standard'], f_2['features_bm_2_all_standard'][:, 2:],
-                          f_2['features_bm_4_all_standard'][:, 2:]), axis=1)
-# f_train = f['features_train']
-y_train = loadmat('y_all_final.mat')['y_all'][:,8]
-
-f_1 = loadmat('features_all_final.mat')
-# f_dev_1 = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_4_dev']), axis=1)
-f_2 = loadmat('features_bm_all_standard.mat')
-# f_dev_2 = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_4_dev']), axis=1)
-f_dev = np.concatenate((f_1['features_1_all'], f_1['features_2_all'], f_1['features_4_all'],
-                        f_2['features_bm_1_all_standard'], f_2['features_bm_2_all_standard'][:, 2:],
-                        f_2['features_bm_4_all_standard'][:, 2:]), axis=1)
-# f_dev = f['features_dev']
-y_dev = loadmat('y_all_final.mat')['y_all'][:,8]
+import load
+from network_util import find_best_threshold, calculate_F_G, calculate_AUC
+from scipy.io import savemat
+import copy
+from subset_selection import train_NN_classifier, train_tree_classifier
+import json
+import sys
+import pickle
+import time
+import random
 
 
-save_dir = "save"
+def permutation_importances_F1(rf, x, y, times):
+    y_pred_bl = rf.predict(x)
+    baseline_F1 = calculate_F_G(y_pred_bl, y, 1)[0]
+    imp = []
+    for t in range(times):
+        for col in range(x.shape[1]):
+            save = x[:, col].copy()
+            x[:, col] = np.random.permutation(x[:, col])
+            y_pred_permu = rf.predict(x)
+            permu_F1 = calculate_F_G(y_pred_permu, y, 1)[0]
+            x[:, col] = save
+            imp.append(baseline_F1 - permu_F1)
 
-model = Sequential()
-model.add(Dense(64, input_dim=230, activation='relu'))
-model.add(Dense(32, activation='relu'))
-model.add(Dense(1, activation='sigmoid'))
-
-
-class Metrics(Callback):
-    def __init__(self, save_dir):
-        super().__init__()
-
-        self.save_dir = save_dir
-
-    def on_train_begin(self, logs={}):
-        self.num_classes = 9
-        self.beta = 2
-        self.val_accuracy = []
-        self.val_f_measure = []
-        self.val_Fbeta_measure = []
-        self.val_Gbeta_measure = []
-        self.FG_mean = []
-
-    def on_epoch_end(self, epoch, logs={}):
-        val_pred_score = np.asarray(self.model.predict(self.validation_data[0]))
-        val_targ = self.validation_data[1]
-
-        # val_pred_label = np.zeros((val_pred_score.shape[0], self.num_classes), dtype=int)
-        # labels = np.argmax(val_pred_score, axis=1)
-        # for i, label in enumerate(labels):
-        #     val_pred_label[i, label] = 1
-        #
-        # accuracy, f_measure, Fbeta_measure, Gbeta_measure = compute_beta_score(val_targ, val_pred_label, self.beta,
-        #                                                                        self.num_classes)
-        # FG_mean = np.mean([Fbeta_measure, Gbeta_measure])
-        # self.val_accuracy.append(accuracy)
-        # self.val_f_measure.append(f_measure)
-        # self.val_Fbeta_measure.append(Fbeta_measure)
-        # self.val_Gbeta_measure.append(Gbeta_measure)
-        # self.FG_mean.append(FG_mean)
-        # print(" - val_accuracy:% f - val_f_measure:% f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
-        #       % (accuracy, f_measure, Fbeta_measure, Gbeta_measure, FG_mean))
-
-        # with open(os.path.join(self.save_dir, f"log-epoch{epoch+1:03d}-FG_mean{FG_mean:.3f}.txt"), 'a', encoding='utf-8') as f:
-        #     f.write("val_accuracy:% f \nval_f_measure:% f \nval_Fbeta_measure:% f \nval_Gbeta_measure:% f \nGeometric Mean:% f"
-        #       % (accuracy, f_measure, Fbeta_measure, Gbeta_measure, FG_mean))
-
-        threshold = np.arange(0, 1, 0.001)
-        tn = np.zeros(threshold.shape)
-        fp = np.zeros(threshold.shape)
-        fn = np.zeros(threshold.shape)
-        tp = np.zeros(threshold.shape)
-        for n, t in enumerate(threshold):
-            tn[n], fp[n], fn[n], tp[n] = confusion_matrix(val_targ, np.ceil(val_pred_score - t)).ravel()
-        Fbeta_measure = (1 + self.beta ** 2) * tp / ((1 + self.beta ** 2) * tp + fp + self.beta ** 2 * fn)
-        Gbeta_measure = tp / (tp + fp + self.beta * fn)
-        FG_mean = (Fbeta_measure + Gbeta_measure) / 2
-        best_threshold = threshold[np.argmax(FG_mean)]
-
-        val_pred_label = np.ceil(val_pred_score-best_threshold)
-        TP = np.sum(val_pred_label * val_targ)
-        FP = np.sum(val_pred_label * (1 - val_targ))
-        FN = np.sum((1 - val_pred_label) * val_targ)
-        Fbeta_measure = (1 + self.beta ** 2) * TP / ((1 + self.beta ** 2) * TP + FP + self.beta ** 2 * FN)
-        Gbeta_measure = TP / (TP + FP + self.beta * FN)
-        FG_mean = (Fbeta_measure + Gbeta_measure) / 2
-        print("- beat_threshold: %f - val_Fbeta_measure:% f - val_Gbeta_measure:% f - Geometric Mean:% f"
-              % (best_threshold, Fbeta_measure, Gbeta_measure, FG_mean))
-
-        with open(os.path.join(self.save_dir, f"log-epoch{epoch+1:03d}-beat_threshold{best_threshold:.3f}-FG_mean{FG_mean:.3f}.txt"), 'a', encoding='utf-8') as f:
-            f.write("beat_threshold: %f \nval_Fbeta_measure:% f \nval_Gbeta_measure:% f \nGeometric Mean:% f"
-              % (best_threshold, Fbeta_measure, Gbeta_measure, FG_mean))
-
-# lr = 0.001
-# model.compile(loss="categorical_crossentropy", optimizer=Adam(lr=lr), metrics=['accuracy'])
-# model.compile(loss=weighted_mse, optimizer=Adam(lr=lr), metrics=['accuracy'])
-model.compile(loss="binary_crossentropy", optimizer="adam", metrics=['accuracy'])
-
-model_save_dir = make_save_dir(save_dir, "decision_model_class9_final")
-
-stopping = keras.callbacks.EarlyStopping(patience=20)
+    return np.array(imp).reshape((times, -1))
 
 
-def scheduler(epoch):
-    if epoch < 5:
-        return 0.001
-    elif epoch < 10:
-        return 0.0001
+if __name__ == '__main__':
+    # load data
+    f = loadmat('./features/features_train.mat')
+    f_train = np.concatenate((f['features_1_train'], f['features_2_train'], f['features_3_train'],
+                              f['features_4_train'], f['features_5_train'], f['features_6_train'],
+                              f['features_7_train'], f['features_8_train'], f['features_9_train'],
+                              f['features_10_train'], f['features_11_train'], f['features_12_train']), axis=1)
+    y_train = loadmat('./features/y_train.mat')['y_train']
+
+    f = loadmat('./features/features_dev.mat')
+    f_dev = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_3_dev'],
+                            f['features_4_dev'], f['features_5_dev'], f['features_6_dev'],
+                            f['features_7_dev'], f['features_8_dev'], f['features_9_dev'],
+                            f['features_10_dev'], f['features_11_dev'], f['features_12_dev']), axis=1)
+    y_dev = loadmat('./features/y_dev.mat')['y_dev']
+
+    f = loadmat('./features/features_test.mat')
+    f_test = np.concatenate((f['features_1_test'], f['features_2_test'], f['features_3_test'],
+                             f['features_4_test'], f['features_5_test'], f['features_6_test'],
+                             f['features_7_test'], f['features_8_test'], f['features_9_test'],
+                             f['features_10_test'], f['features_11_test'], f['features_12_test']), axis=1)
+    y_test = loadmat('./features/y_test.mat')['y_test']
+
+    subset = True  # True: use subset; False: use 12-lead ECG
+    model = 1  # 1: NN; 2: Random Forest
+    ensemble = False  # True: 9 models for 9 rhythms; False: 1 model for all 9 rhythms
+    # model=2 not compatible with ensemble=False
+    experiment_name = 'NN_rep10_F1'
+    file_name = experiment_name
+    if ensemble:
+        file_name = file_name+'_ensemble'
+    if not subset:
+        file_name = file_name+'_complete'
+
+    lead_subsets = []
+    train_pred_score_list = []
+    train_pred_label_list = []
+    val_pred_score_list = []
+    val_pred_label_list = []
+    test_pred_score_list = []
+    test_pred_label_list = []
+    if ensemble:
+        for c in range(9):
+            subset_result_file = 'forward_subset_selection_'+experiment_name+'_rhythm'+str(c)+'_v3.mat'
+            file_path = os.path.join('./result/subset_selection', subset_result_file)
+            f = loadmat(file_path)
+            leads = f['leads_selected'].flatten().tolist()
+            p_value = f['p_value'].flatten()
+            t_value = f['t_value'].flatten()
+
+            lead_subset = []
+            for i in range(12):
+                if subset:
+                    if p_value[i].item() <= 0.05 and t_value[i] >= 0:
+                        lead_subset.append(leads[i])
+                    else:
+                        break
+                else:
+                    lead_subset.append(leads[i])
+            lead_subsets.append(lead_subset)
+
+            feature_index = []
+            for l in lead_subset:
+                feature_index.append(np.arange(32 * l, 32 * (l + 1), 1))
+            feature_index = np.array(feature_index).flatten()
+
+            model_folder = os.path.join('./save', 'decision_model_'+file_name)
+            if not os.path.exists(model_folder):
+                os.makedirs(model_folder)
+            start_time = str(int(time.time())) + '-' + str(random.randrange(1000))
+            model_filepath = os.path.join(model_folder, 'model_rhythm'+str(c)+'_'+start_time+'.h5')
+
+            input_dim = feature_index.shape[0]
+            output_dim = 1
+            if model == 1:
+                NN_model, F1_train, G_train, AUC_train, \
+                F1_val, G_val, AUC_val, \
+                F1_test, G_test, AUC_test = \
+                    train_NN_classifier(input_dim, output_dim,
+                                        f_train[:, feature_index], y_train[:, c],
+                                        f_dev[:, feature_index], y_dev[:, c],
+                                        f_test[:, feature_index], y_test[:, c])
+                NN_model.save(model_filepath)
+                train_pred_score_c = np.asarray(NN_model.predict(f_train[:, feature_index]))
+                val_pred_score_c = np.asarray(NN_model.predict(f_dev[:, feature_index]))
+                test_pred_score_c = np.asarray(NN_model.predict(f_test[:, feature_index]))
+            elif model == 2:
+                tree_models, F1_train, G_train, AUC_train, \
+                F1_val, G_val, AUC_val, \
+                F1_test, G_test, AUC_test = \
+                    train_tree_classifier(output_dim,
+                                          f_train[:, feature_index], y_train[:, [c]],
+                                          f_dev[:, feature_index], y_dev[:, [c]],
+                                          f_test[:, feature_index], y_test[:, [c]])
+                pickle.dump(tree_models[0], open(model_filepath, 'wb'))
+                train_pred_score_c = tree_models[0].predict_proba(f_train[:, feature_index])[:, 1].reshape((-1, 1))
+                val_pred_score_c = tree_models[0].predict_proba(f_dev[:, feature_index])[:, 1].reshape((-1, 1))
+                test_pred_score_c = tree_models[0].predict_proba(f_test[:, feature_index])[:, 1].reshape((-1, 1))
+            else:
+                sys.exit('ERROR: No corresponding model (model=1: neural network; model=2: random forest)')
+
+            train_pred_label_c = np.ceil(train_pred_score_c - 0.5)
+            train_pred_score_list.append(train_pred_score_c)
+            train_pred_label_list.append(train_pred_label_c)
+
+            val_pred_label_c = np.ceil(val_pred_score_c - 0.5)
+            val_pred_score_list.append(val_pred_score_c)
+            val_pred_label_list.append(val_pred_label_c)
+
+            test_pred_label_c = np.ceil(test_pred_score_c - 0.5)
+            test_pred_score_list.append(test_pred_score_c)
+            test_pred_label_list.append(test_pred_label_c)
+
+        pred_score_train = np.concatenate(train_pred_score_list, axis=1)
+        pred_label_train = np.concatenate(train_pred_label_list, axis=1)
+        true_label_train = y_train
+        pred_score_val = np.concatenate(val_pred_score_list, axis=1)
+        pred_label_val = np.concatenate(val_pred_label_list, axis=1)
+        true_label_val = y_dev
+        pred_score_test = np.concatenate(test_pred_score_list, axis=1)
+        pred_label_test = np.concatenate(test_pred_label_list, axis=1)
+        true_label_test = y_test
     else:
-        return 0.00001
+        if model == 1:
+            subset_result_file = 'forward_subset_selection_'+experiment_name+'.mat'
+            file_path = os.path.join('./result/subset_selection', subset_result_file)
+            f = loadmat(file_path)
+            leads = f['leads_selected'].flatten().tolist()
+            p_value = f['p_value'].flatten()
+            t_value = f['t_value'].flatten()
 
-reduce_lr = keras.callbacks.LearningRateScheduler(scheduler)
-# reduce_lr = keras.callbacks.ReduceLROnPlateau(
-#     factor=0.1,
-#     patience=5,
-#     verbose=1,
-#     mode='min',
-#     min_lr=lr * 0.01)
+            if subset:
+                lead_subset = []
+                for i in range(12):
+                    if p_value[i].item() <= 0.05 and t_value[i] >= 0:
+                        lead_subset.append(leads[i])
+                    else:
+                        break
+            else:
+                lead_subset = list(range(12))
+            lead_subsets.append(lead_subset)
 
-checkpointer = keras.callbacks.ModelCheckpoint(
-    filepath=get_filename_for_saving(model_save_dir),
-    save_best_only=False)
+            feature_index = []
+            for l in lead_subset:
+                feature_index.append(np.arange(32 * l, 32 * (l + 1), 1))
+            feature_index = np.array(feature_index).flatten()
 
-metrics = Metrics(save_dir=model_save_dir)
+            model_folder = os.path.join('./save', 'decision_model_'+file_name)
+            if not os.path.exists(model_folder):
+                os.makedirs(model_folder)
+            start_time = str(int(time.time())) + '-' + str(random.randrange(1000))
+            model_filepath = os.path.join(model_folder, start_time+'.h5')
 
-total = y_dev.shape[0]
-pos = np.sum(y_dev)
-neg = total - pos
-weight_for_0 = (1 / neg)*(total)/2.0
-weight_for_1 = (1 / pos)*(total)/2.0
-class_weight = {0: weight_for_0, 1: weight_for_1}
+            input_dim = feature_index.shape[0]
+            output_dim = 9
 
-model.fit(f_train, y_train, epochs=30, batch_size=10, validation_data=(f_dev, y_dev), class_weight=class_weight,
-          callbacks=[checkpointer, metrics, reduce_lr, stopping])
+            NN_model, F1_train, G_train, AUC_train, \
+            F1_val, G_val, AUC_val, \
+            F1_test, G_test, AUC_test = \
+                train_NN_classifier(input_dim, output_dim,
+                                    f_train[:, feature_index], y_train,
+                                    f_dev[:, feature_index], y_dev,
+                                    f_test[:, feature_index], y_test)
+            NN_model.save(model_filepath)
+            pred_score_train = np.asarray(NN_model.predict(f_train[:, feature_index]))
+            pred_score_val = np.asarray(NN_model.predict(f_dev[:, feature_index]))
+            pred_score_test = np.asarray(NN_model.predict(f_test[:, feature_index]))
+
+            pred_label_train = np.ceil(pred_score_train - 0.5)
+            pred_label_val = np.ceil(pred_score_val - 0.5)
+            pred_label_test = np.ceil(pred_score_test - 0.5)
+
+            true_label_train = y_train
+            true_label_val = y_dev
+            true_label_test = y_test
+        elif model == 2:
+            sys.exit('ERROR: model=2 not compatible with ensemble=False')
+        else:
+            sys.exit('ERROR: No corresponding model (model=1: neural network; model=2: random forest)')
+
+    accuracy_train, f_measure_train, Fbeta_measure_train, Gbeta_measure_train = \
+        compute_beta_score(true_label_train, pred_label_train, 1, 9)
+    accuracy_val, f_measure_val, Fbeta_measure_val, Gbeta_measure_val = \
+        compute_beta_score(true_label_val, pred_label_val, 1, 9)
+    accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test = \
+        compute_beta_score(true_label_test, pred_label_test, 1, 9)
+
+    save_folder = os.path.join('./result', 'decision_result', file_name)
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+    save_dir = os.path.join(save_folder, 'decision_result_'+start_time+'.mat')
+    savemat(save_dir,
+            {'accuracy_train': accuracy_train,
+             'F1_train': f_measure_train,
+             'pred_score_train': pred_score_train,
+             'pred_label_train': pred_label_train,
+             'true_label_train': true_label_train,
+             'accuracy_val': accuracy_val,
+             'F1_val': f_measure_val,
+             'pred_score_val': pred_score_val,
+             'pred_label_val': pred_label_val,
+             'true_label_val': true_label_val,
+             'accuracy_test': accuracy_test,
+             'F1_test': f_measure_test,
+             'pred_score_test': pred_score_test,
+             'pred_label_test': pred_label_test,
+             'true_label_test': true_label_test})
+    with open('./result/subset_selection/lead_subsets_'+file_name+'.txt', 'w') as f:
+        f.write(json.dumps(lead_subsets))
+
+
 
