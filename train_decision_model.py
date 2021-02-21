@@ -35,26 +35,26 @@ def permutation_importances_F1(rf, x, y, times):
 
 if __name__ == '__main__':
     # load data
-    f = loadmat('.\\features\\features_train.mat')
+    f = loadmat('./features/features_train.mat')
     f_train = np.concatenate((f['features_1_train'], f['features_2_train'], f['features_3_train'],
                               f['features_4_train'], f['features_5_train'], f['features_6_train'],
                               f['features_7_train'], f['features_8_train'], f['features_9_train'],
                               f['features_10_train'], f['features_11_train'], f['features_12_train']), axis=1)
-    y_train = loadmat('.\\features\\y_train.mat')['y_train']
+    y_train = loadmat('./features/y_train.mat')['y_train']
 
-    f = loadmat('.\\features\\features_dev.mat')
+    f = loadmat('./features/features_dev.mat')
     f_dev = np.concatenate((f['features_1_dev'], f['features_2_dev'], f['features_3_dev'],
                             f['features_4_dev'], f['features_5_dev'], f['features_6_dev'],
                             f['features_7_dev'], f['features_8_dev'], f['features_9_dev'],
                             f['features_10_dev'], f['features_11_dev'], f['features_12_dev']), axis=1)
-    y_dev = loadmat('.\\features\\y_dev.mat')['y_dev']
+    y_dev = loadmat('./features/y_dev.mat')['y_dev']
 
-    f = loadmat('.\\features\\features_test.mat')
+    f = loadmat('./features/features_test.mat')
     f_test = np.concatenate((f['features_1_test'], f['features_2_test'], f['features_3_test'],
                              f['features_4_test'], f['features_5_test'], f['features_6_test'],
                              f['features_7_test'], f['features_8_test'], f['features_9_test'],
                              f['features_10_test'], f['features_11_test'], f['features_12_test']), axis=1)
-    y_test = loadmat('.\\features\\y_test.mat')['y_test']
+    y_test = loadmat('./features/y_test.mat')['y_test']
 
     subset = True  # True: use subset; False: use 12-lead ECG
     model = 1  # 1: NN; 2: Random Forest
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     if ensemble:
         for c in range(9):
             subset_result_file = 'forward_subset_selection_'+experiment_name+'_rhythm'+str(c)+'_v3.mat'
-            file_path = os.path.join('.\\result\\subset_selection', subset_result_file)
+            file_path = os.path.join('./result/subset_selection', subset_result_file)
             f = loadmat(file_path)
             leads = f['leads_selected'].flatten().tolist()
             p_value = f['p_value'].flatten()
@@ -99,7 +99,7 @@ if __name__ == '__main__':
                 feature_index.append(np.arange(32 * l, 32 * (l + 1), 1))
             feature_index = np.array(feature_index).flatten()
 
-            model_folder = os.path.join('.\\save', 'decision_model_'+file_name)
+            model_folder = os.path.join('./save', 'decision_model_'+file_name)
             if not os.path.exists(model_folder):
                 os.makedirs(model_folder)
             start_time = str(int(time.time())) + '-' + str(random.randrange(1000))
@@ -158,7 +158,7 @@ if __name__ == '__main__':
     else:
         if model == 1:
             subset_result_file = 'forward_subset_selection_'+experiment_name+'.mat'
-            file_path = os.path.join('.\\result\\subset_selection', subset_result_file)
+            file_path = os.path.join('./result/subset_selection', subset_result_file)
             f = loadmat(file_path)
             leads = f['leads_selected'].flatten().tolist()
             p_value = f['p_value'].flatten()
@@ -180,7 +180,7 @@ if __name__ == '__main__':
                 feature_index.append(np.arange(32 * l, 32 * (l + 1), 1))
             feature_index = np.array(feature_index).flatten()
 
-            model_folder = os.path.join('.\\save', 'decision_model_'+file_name)
+            model_folder = os.path.join('./save', 'decision_model_'+file_name)
             if not os.path.exists(model_folder):
                 os.makedirs(model_folder)
             start_time = str(int(time.time())) + '-' + str(random.randrange(1000))
@@ -220,7 +220,7 @@ if __name__ == '__main__':
     accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test = \
         compute_beta_score(true_label_test, pred_label_test, 1, 9)
 
-    save_folder = os.path.join('.\\result', 'decision_result', file_name)
+    save_folder = os.path.join('./result', 'decision_result', file_name)
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
     save_dir = os.path.join(save_folder, 'decision_result_'+start_time+'.mat')
@@ -240,7 +240,7 @@ if __name__ == '__main__':
              'pred_score_test': pred_score_test,
              'pred_label_test': pred_label_test,
              'true_label_test': true_label_test})
-    with open('.\\result\\subset_selection\\lead_subsets_'+file_name+'.txt', 'w') as f:
+    with open('./result/subset_selection/lead_subsets_'+file_name+'.txt', 'w') as f:
         f.write(json.dumps(lead_subsets))
 
 

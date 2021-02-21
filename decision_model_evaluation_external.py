@@ -12,12 +12,12 @@ import pickle
 
 if __name__ == '__main__':
     # load data
-    f = loadmat('.\\features\\features_external_test_E.mat')
+    f = loadmat('./features/features_external_test_E.mat')
     f_test = np.concatenate((f['features_1_test'], f['features_2_test'], f['features_3_test'],
                              f['features_4_test'], f['features_5_test'], f['features_6_test'],
                              f['features_7_test'], f['features_8_test'], f['features_9_test'],
                              f['features_10_test'], f['features_11_test'], f['features_12_test']), axis=1)
-    y_test = loadmat('.\\features\\y_external_test_E.mat')['y_test']
+    y_test = loadmat('./features/y_external_test_E.mat')['y_test']
 
     subset = True
     model = 1
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     save_folder = file_name + '_external_test_E'
 
     if subset:
-        with open('.\\result\\subset_selection\\lead_subsets_'+experiment_name+'.txt') as f:
+        with open('./result/subset_selection/lead_subsets_'+experiment_name+'.txt') as f:
             lead_subset = json.load(f)[0]
     else:
         lead_subset = range(12)
@@ -38,7 +38,7 @@ if __name__ == '__main__':
         feature_index.append(np.arange(32 * l, 32 * (l + 1), 1))
     feature_index = np.array(feature_index).flatten()
 
-    model_folder = os.path.join('.\\save', 'decision_model_' + file_name)
+    model_folder = os.path.join('./save', 'decision_model_' + file_name)
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
     for root, dirs, files in os.walk(model_folder, topdown=False):
@@ -100,7 +100,7 @@ if __name__ == '__main__':
                 accuracy_test, f_measure_test, Fbeta_measure_test, Gbeta_measure_test = \
                     compute_beta_score(true_label_test_adjust, pred_label_test_adjust, 1, 5)
 
-                save_dir = os.path.join('.\\result', 'external_test', save_folder)
+                save_dir = os.path.join('./result', 'external_test', save_folder)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
                 save_file = os.path.join(save_dir, model_name + '.mat')

@@ -64,7 +64,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     pred_score, pred_label, true_label, metrics = predict(args.data_path, args.model_config_file)
     print("Saving result...")
-    savemat(".\\predict_result.mat",
+    savemat("./predict_result.mat",
             {
                 "pred_score": pred_score,
                 "pred_label": pred_label,

@@ -14,25 +14,25 @@ from scipy.io import savemat
 from evaluate_12ECG_score import compute_beta_score
 
 # path for data
-data_path_train = ".\\data_old\\train"
-data_path_dev = ".\\data_old\\dev"
-data_path_test = ".\\data_old\\test"
+data_path_train = "./data_old/train"
+data_path_dev = "./data_old/dev"
+data_path_test = "./data_old/test"
 
 # path for lead models
 leads = range(1, 13)
 batch_size = 1
-leads_model_path = {'lead1': ".\\save\\lead1_ResNet8_32_WCE\\epoch022-val_loss0.393-train_loss0.316.hdf5",
-                    'lead2': ".\\save\\lead2_ResNet8_32_WCE\\epoch045-val_loss0.217-train_loss0.247.hdf5",
-                    'lead3': ".\\save\\lead3_ResNet8_32_WCE\\epoch024-val_loss0.291-train_loss0.329.hdf5",
-                    'lead4': ".\\save\\lead4_ResNet8_32_WCE\\epoch029-val_loss0.194-train_loss0.208.hdf5",
-                    'lead5': ".\\save\\lead5_ResNet8_32_WCE\\epoch030-val_loss0.354-train_loss0.319.hdf5",
-                    'lead6': ".\\save\\lead6_ResNet8_32_WCE\\epoch025-val_loss0.331-train_loss0.322.hdf5",
-                    'lead7': ".\\save\\lead7_ResNet8_32_WCE\\epoch030-val_loss0.315-train_loss0.298.hdf5",
-                    'lead8': ".\\save\\lead8_ResNet8_32_WCE\\epoch024-val_loss0.614-train_loss0.318.hdf5",
-                    'lead9': ".\\save\\lead9_ResNet8_32_WCE\\epoch023-val_loss0.278-train_loss0.287.hdf5",
-                    'lead10': ".\\save\\lead10_ResNet8_32_WCE\\epoch039-val_loss0.307-train_loss0.282.hdf5",
-                    'lead11': ".\\save\\lead11_ResNet8_32_WCE\\epoch027-val_loss0.485-train_loss0.320.hdf5",
-                    'lead12': ".\\save\\lead12_ResNet8_32_WCE\\epoch018-val_loss0.843-train_loss0.339.hdf5"}
+leads_model_path = {'lead1': "./save/lead1_ResNet8_32_WCE/epoch022-val_loss0.393-train_loss0.316.hdf5",
+                    'lead2': "./save/lead2_ResNet8_32_WCE/epoch045-val_loss0.217-train_loss0.247.hdf5",
+                    'lead3': "./save/lead3_ResNet8_32_WCE/epoch024-val_loss0.291-train_loss0.329.hdf5",
+                    'lead4': "./save/lead4_ResNet8_32_WCE/epoch029-val_loss0.194-train_loss0.208.hdf5",
+                    'lead5': "./save/lead5_ResNet8_32_WCE/epoch030-val_loss0.354-train_loss0.319.hdf5",
+                    'lead6': "./save/lead6_ResNet8_32_WCE/epoch025-val_loss0.331-train_loss0.322.hdf5",
+                    'lead7': "./save/lead7_ResNet8_32_WCE/epoch030-val_loss0.315-train_loss0.298.hdf5",
+                    'lead8': "./save/lead8_ResNet8_32_WCE/epoch024-val_loss0.614-train_loss0.318.hdf5",
+                    'lead9': "./save/lead9_ResNet8_32_WCE/epoch023-val_loss0.278-train_loss0.287.hdf5",
+                    'lead10': "./save/lead10_ResNet8_32_WCE/epoch039-val_loss0.307-train_loss0.282.hdf5",
+                    'lead11': "./save/lead11_ResNet8_32_WCE/epoch027-val_loss0.485-train_loss0.320.hdf5",
+                    'lead12': "./save/lead12_ResNet8_32_WCE/epoch018-val_loss0.843-train_loss0.339.hdf5"}
 
 # load data
 dataset_train = load.load_dataset(data_path_train, False)
@@ -104,10 +104,10 @@ for i, lead in enumerate(leads):
         G_test_leadxrhythm[i, c] = G_c
 
 # save data
-if not os.path.exists('.\\result'):
-    os.makedirs('.\\result')
+if not os.path.exists('./result'):
+    os.makedirs('./result')
 
-savemat('.\\result\\result_single_lead_model.mat',
+savemat('./result/result_single_lead_model.mat',
         {'F1_train_leadxrhythm': F1_train_leadxrhythm,
          'G_train_leadxrhythm': G_train_leadxrhythm,
          'F1_train_lead': F1_train_lead,
