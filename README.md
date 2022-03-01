@@ -2,12 +2,11 @@
 This repository is an implementation of the papers:  
   
 - [Changxin Lai, Shijie Zhou, and Natalia Trayanova. 
+**"Optimal ECG-lead selection increases generalizability of deep learning on ECG abnormality classification"** Philosophical Transactions of the Royal Society A: Mathematical, Physical and Engineering Sciences 379, 20200258 (2021)](https://doi.org/10.1098/rsta.2020.0258)
+- [Changxin Lai, Shijie Zhou, and Natalia Trayanova. 
 **"Heart Rhythm Classification From an Optimal Lead Subset of the 12-lead Electrocardiogram by Deep Learning."** 
 Circulation 142.Suppl_3 (2020): A15042-A15042.](https://www.ahajournals.org/doi/abs/10.1161/circ.142.suppl_3.15042)
-(Presented at AHA Scientific Sessions 2020)  
-- Changxin Lai, Shijie Zhou, and Natalia Trayanova. 
-**"A Deep Learning Study on Heart Rhythm Classification: Using a Novel Approach to Increase Generalizability."**
-(Under review)
+(Presented at AHA Scientific Sessions 2020)
 
 We developed a multi-stage DL-based model to automatically detect heart rhythm types, which takes as input the 
 raw 12-lead ECG data with variable length and outputs a heart rhythm interpretation for the whole signal. 
